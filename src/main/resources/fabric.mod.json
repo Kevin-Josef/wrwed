@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "mapartassist",
+  "version": "${version}",
+  "name": "MapArt Assist",
+  "description": "Platziert automatisch den Block, den du ansiehst. Funktioniert mit Litematica (Easy Place). Mit eigenem Menue und anpassbaren Farben.",
+  "authors": ["Du"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["de.mapartassist.MapArtAssistClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "litematica": "*"
+  }
+}
