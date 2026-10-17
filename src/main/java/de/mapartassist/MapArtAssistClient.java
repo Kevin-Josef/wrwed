@@ -103,8 +103,13 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (actual.getBlock() == wanted.getBlock()) return;
         if (!actual.isAir() && !actual.isReplaceable()) return;
 
-        // Never attempt to place inside the player's own collision box.
-        if (player.getBoundingBox().intersects(new Box(target))) return;
+        // Keep placement clear of the player, including the feet/edge case:
+        // a carpet placed exactly in the block space beneath the player's feet can
+        // cause client/server collision corrections even when the full block boxes
+        // only touch at their boundary. Expand the target slightly upward and sideways.
+        Box playerSafety = player.getBoundingBox().expand(0.12, 0.18, 0.12);
+        Box targetSafety = new Box(target).expand(0.08, 0.16, 0.08);
+        if (playerSafety.intersects(targetSafety)) return;
 
         Block wantedBlock = wanted.getBlock();
         if (!isBlock(player.getMainHandStack(), wantedBlock)) {

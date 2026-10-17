@@ -22,3 +22,6 @@ server-valid placement over auto-detecting arbitrary nearby blocks.
 
 
 Experimental smooth-placement patch (1.0.2 source): minimum 3-tick placement interval, default delay 4 ticks, and swing animation only after an accepted interaction. This source has not been compiled or tested in Minecraft.
+
+
+1.0.3 experimental player-clearance patch: placement is skipped when the target is close to the player's feet/body, with a small expanded safety box intended to reduce collision corrections during carpet placement. Not compiled or tested in Minecraft.
