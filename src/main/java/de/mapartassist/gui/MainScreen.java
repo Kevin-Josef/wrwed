@@ -9,7 +9,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
 public class MainScreen extends Screen {
-    private static final int W = 230, H = 170;
+    private static final int W = 230, H = 200;
     private final Screen parent;
     private int left, top;
 
@@ -24,6 +24,12 @@ public class MainScreen extends Screen {
                 .formatted(on ? Formatting.GREEN : Formatting.RED);
     }
 
+    private Text invText() {
+        boolean on = ModConfig.get().takeFromInventory;
+        return Text.literal("Block aus Inventar holen: " + (on ? "AN" : "AUS"))
+                .formatted(on ? Formatting.GREEN : Formatting.RED);
+    }
+
     @Override
     protected void init() {
         left = (width - W) / 2;
@@ -35,11 +41,16 @@ public class MainScreen extends Screen {
             b.setMessage(toggleText());
         }).dimensions(left + 10, top + 28, W - 20, 20).build());
 
-        addDrawableChild(new DelaySlider(left + 10, top + 54, W - 20, 20));
+        addDrawableChild(ButtonWidget.builder(invText(), b -> {
+            cfg.takeFromInventory = !cfg.takeFromInventory;
+            b.setMessage(invText());
+        }).dimensions(left + 10, top + 54, W - 20, 20).build());
+
+        addDrawableChild(new DelaySlider(left + 10, top + 80, W - 20, 20));
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Farbe ändern"),
                 b -> client.setScreen(new ColorScreen(this)))
-                .dimensions(left + 10, top + 80, W - 20, 20).build());
+                .dimensions(left + 10, top + 106, W - 20, 20).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Fertig"), b -> close())
                 .dimensions(left + 10, top + H - 30, W - 20, 20).build());
@@ -55,7 +66,7 @@ public class MainScreen extends Screen {
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         super.render(ctx, mouseX, mouseY, delta);
         ctx.drawTextWithShadow(textRenderer, "MapArt Assist", left + 10, top + 9, Theme.accent());
-        ctx.drawTextWithShadow(textRenderer, "Weitere Features folgen...", left + 10, top + 112, 0xFF888888);
+        ctx.drawTextWithShadow(textRenderer, "Weitere Features folgen...", left + 10, top + 138, 0xFF888888);
     }
 
     @Override
