@@ -12,6 +12,8 @@ public final class Theme {
     public static void panel(DrawContext ctx, int x, int y, int w, int h) {
         ctx.fill(x, y, x + w, y + h, bg());
         ctx.fill(x, y, x + w, y + 3, accent());
-        ctx.drawBorder(x, y, w, h, accent());
+        ctx.fill(x, y + h - 1, x + w, y + h, accent());
+        ctx.fill(x, y, x + 1, y + h, accent());
+        ctx.fill(x + w - 1, y, x + w, y + h, accent());
     }
 }
