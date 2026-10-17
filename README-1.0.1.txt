@@ -25,3 +25,4 @@ Experimental smooth-placement patch (1.0.2 source): minimum 3-tick placement int
 
 
 1.0.3 experimental player-clearance patch: placement is skipped when the target is close to the player's feet/body, with a small expanded safety box intended to reduce collision corrections during carpet placement. Not compiled or tested in Minecraft.
+\n\n1.0.4 experimental source patch: serializes placement attempts and waits up to 8 ticks for the world state to confirm each target block. If the server does not confirm, it pauses instead of immediately retrying. Not compiled or tested in Minecraft.\n

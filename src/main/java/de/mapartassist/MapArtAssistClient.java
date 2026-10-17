@@ -40,6 +40,12 @@ public class MapArtAssistClient implements ClientModInitializer {
     private int messageCooldown = 0;
     private boolean warnedMissing = false;
 
+    // One placement at a time: wait for the server-authoritative world state
+    // before issuing another interaction. This avoids rapid retries during rollback.
+    private BlockPos pendingPos = null;
+    private Block pendingBlock = null;
+    private int pendingTicks = 0;
+
     @Override
     public void onInitializeClient() {
         ModConfig.load();
@@ -66,6 +72,24 @@ public class MapArtAssistClient implements ClientModInitializer {
 
         if (!cfg.autoPlace || client.player == null || client.world == null
                 || client.currentScreen != null || client.interactionManager == null) return;
+
+        if (pendingPos != null) {
+            BlockState confirmed = client.world.getBlockState(pendingPos);
+            if (pendingBlock != null && confirmed.getBlock() == pendingBlock) {
+                pendingPos = null;
+                pendingBlock = null;
+                pendingTicks = 0;
+            } else if (++pendingTicks < 8) {
+                return;
+            } else {
+                // Server did not confirm the placement; don't immediately spam retries.
+                pendingPos = null;
+                pendingBlock = null;
+                pendingTicks = 0;
+                cooldown = 5;
+                return;
+            }
+        }
 
         if (cooldown > 0) {
             cooldown--;
@@ -135,9 +159,12 @@ public class MapArtAssistClient implements ClientModInitializer {
         // and client/server correction jitter during rapid carpet placement.
         if (result.isAccepted()) {
             player.swingHand(Hand.MAIN_HAND);
-            cooldown = Math.max(3, cfg.delayTicks);
+            pendingPos = target.toImmutable();
+            pendingBlock = wantedBlock;
+            pendingTicks = 0;
+            cooldown = Math.max(1, cfg.delayTicks);
         } else {
-            cooldown = 3;
+            cooldown = 4;
         }
     }
 
