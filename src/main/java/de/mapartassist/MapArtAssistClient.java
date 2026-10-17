@@ -17,6 +17,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.hit.BlockHitResult;
@@ -123,9 +124,16 @@ public class MapArtAssistClient implements ClientModInitializer {
 
         // Reuse the actual vanilla hit result. Do not fabricate a face/position:
         // servers validate that the clicked block and face are plausible.
-        client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
-        player.swingHand(Hand.MAIN_HAND);
-        cooldown = Math.max(1, cfg.delayTicks);
+        ActionResult result = client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
+        // Avoid extra swing animations and repeated attempts when the interaction was
+        // rejected locally. A slightly longer minimum interval reduces packet bursts
+        // and client/server correction jitter during rapid carpet placement.
+        if (result.isAccepted()) {
+            player.swingHand(Hand.MAIN_HAND);
+            cooldown = Math.max(3, cfg.delayTicks);
+        } else {
+            cooldown = 3;
+        }
     }
 
     private static boolean isBlock(ItemStack stack, Block block) {

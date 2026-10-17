@@ -19,3 +19,6 @@ This version has not been compiled or tested in Minecraft in this environment.
 Because it uses the real crosshair target, you must aim at a supporting block face
 next to the schematic position you want to fill. This intentionally favors reliable
 server-valid placement over auto-detecting arbitrary nearby blocks.
+
+
+Experimental smooth-placement patch (1.0.2 source): minimum 3-tick placement interval, default delay 4 ticks, and swing animation only after an accepted interaction. This source has not been compiled or tested in Minecraft.

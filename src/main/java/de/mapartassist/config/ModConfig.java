@@ -19,7 +19,7 @@ public class ModConfig {
 
     public boolean autoPlace = false;
     public boolean takeFromInventory = true;
-    public int delayTicks = 2;
+    public int delayTicks = 4;
     public int accentColor = DEFAULT_ACCENT; // RGB
     public int bgColor = DEFAULT_BG;         // RGB
 
