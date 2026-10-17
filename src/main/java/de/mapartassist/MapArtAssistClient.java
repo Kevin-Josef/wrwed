@@ -17,9 +17,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.ActionResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
@@ -158,15 +156,13 @@ public class MapArtAssistClient implements ClientModInitializer {
             return;
         }
 
-        // Use the exact hit result validated above immediately. A synthetic key press
-        // is processed later by vanilla and may use a different crosshair target if the
-        // player turns quickly, causing the wrong schematic block/color to be placed.
-        ActionResult result = client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
-        if (result.isAccepted()) {
-            player.swingHand(Hand.MAIN_HAND);
-        } else {
-            return;
-        }
+        // Use vanilla's normal input handler for smoother movement. Verify that
+        // the same target is still current immediately before queueing the click.
+        if (!(client.crosshairTarget instanceof BlockHitResult currentHit)
+                || currentHit.getType() != HitResult.Type.BLOCK
+                || !currentHit.getBlockPos().equals(hit.getBlockPos())
+                || currentHit.getSide() != hit.getSide()) return;
+        KeyBinding.onKeyPressed(client.options.useKey.getDefaultKey());
         pendingPos = target.toImmutable();
         pendingBlock = wantedBlock;
         pendingTicks = 0;
