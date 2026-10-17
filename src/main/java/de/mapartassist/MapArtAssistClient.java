@@ -17,8 +17,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -74,19 +72,27 @@ public class MapArtAssistClient implements ClientModInitializer {
                 || client.currentScreen != null || client.interactionManager == null) return;
 
         if (pendingPos != null) {
-            BlockState confirmed = client.world.getBlockState(pendingPos);
-            if (pendingBlock != null && confirmed.getBlock() == pendingBlock) {
+            // Count down the normal-use interval while awaiting the world update.
+            if (cooldown > 0) cooldown--;
+            pendingTicks++;
+            BlockState observed = client.world.getBlockState(pendingPos);
+
+            // The client predicts a successful placement before the server replies.
+            // Do not treat that immediate prediction as server confirmation; give the
+            // normal interaction/server round trip a few ticks to settle first.
+            if (pendingTicks >= 4 && pendingBlock != null
+                    && observed.getBlock() == pendingBlock) {
                 pendingPos = null;
                 pendingBlock = null;
                 pendingTicks = 0;
-            } else if (++pendingTicks < 8) {
+            } else if (pendingTicks < 8) {
                 return;
             } else {
-                // Server did not confirm the placement; don't immediately spam retries.
+                // No matching block appeared; avoid an immediate retry burst.
                 pendingPos = null;
                 pendingBlock = null;
                 pendingTicks = 0;
-                cooldown = 5;
+                cooldown = 2;
                 return;
             }
         }
@@ -148,21 +154,15 @@ public class MapArtAssistClient implements ClientModInitializer {
             return;
         }
 
-        // Reuse the actual vanilla hit result. Do not fabricate a face/position:
-        // servers validate that the clicked block and face are plausible.
-        ActionResult result = client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
-        // Avoid extra swing animations and repeated attempts when the interaction was
-        // rejected locally. A slightly longer minimum interval reduces packet bursts
-        // and client/server correction jitter during rapid carpet placement.
-        if (result.isAccepted()) {
-            player.swingHand(Hand.MAIN_HAND);
-            pendingPos = target.toImmutable();
-            pendingBlock = wantedBlock;
-            pendingTicks = 0;
-            cooldown = Math.max(1, cfg.delayTicks);
-        } else {
-            cooldown = 4;
-        }
+        // Queue a one-shot press on Minecraft's bound use key. This lets vanilla's
+        // regular input handler call doItemUse()/interactBlock with its own cooldown
+        // and swing behavior instead of calling interactBlock directly from this tick.
+        // The normal hit result is deliberately left untouched.
+        KeyBinding.onKeyPressed(client.options.useKey.getBoundKey());
+        pendingPos = target.toImmutable();
+        pendingBlock = wantedBlock;
+        pendingTicks = 0;
+        cooldown = Math.max(4, cfg.delayTicks);
     }
 
     private static boolean isBlock(ItemStack stack, Block block) {
