@@ -96,16 +96,6 @@ public class MapArtAssistClient implements ClientModInitializer {
             return;
         }
 
-        // Multiplayer safety test: defer block interactions while the player is
-        // moving at normal walking speed. Some servers correct player movement when
-        // a newly placed carpet collides with the player's next movement step.
-        // The pending-placement confirmation above still runs first, so accepted
-        // placements can be confirmed while moving; only new placements are paused.
-        double vx = client.player.getVelocity().x;
-        double vz = client.player.getVelocity().z;
-        double horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
-        if (horizontalSpeed > 0.075) return;
-
         tryPlace(client, cfg);
         if (LitematicaBridge.isMissing() && !warnedMissing) {
             warnedMissing = true;
@@ -137,34 +127,10 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (actual.getBlock() == wanted.getBlock()) return;
         if (!actual.isAir() && !actual.isReplaceable()) return;
 
-        // Keep placement clear of the player, including the feet/edge case:
-        // a carpet placed exactly in the block space beneath the player's feet can
-        // cause client/server collision corrections even when the full block boxes
-        // only touch at their boundary. Expand the target slightly upward and sideways.
-        Box targetSafety = new Box(target).expand(0.08, 0.16, 0.08);
-
-        // Also reserve the player's immediate forward movement corridor. A carpet
-        // placed just outside the current bounding box can still be hit on the next
-        // movement tick, causing step-up / server position correction on multiplayer.
-        // Project in the current horizontal movement direction; if nearly stationary,
-        // use the view direction so the player can still aim ahead while starting to walk.
-        Box playerSafety = player.getBoundingBox().expand(0.08, 0.12, 0.08);
-        double vx = player.getVelocity().x;
-        double vz = player.getVelocity().z;
-        double horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
-        double dx;
-        double dz;
-        if (horizontalSpeed > 0.03) {
-            dx = vx / horizontalSpeed;
-            dz = vz / horizontalSpeed;
-        } else {
-            double yaw = Math.toRadians(player.getYaw());
-            dx = -Math.sin(yaw);
-            dz = Math.cos(yaw);
-        }
-        // Keep roughly one short movement step clear in front of the player.
-        Box movementCorridor = playerSafety.stretch(dx * 0.85, 0.0, dz * 0.85);
-        if (playerSafety.intersects(targetSafety) || movementCorridor.intersects(targetSafety)) return;
+        // Do not place into the player's current collision box. Avoid speculative
+        // forward-corridor blocking: it prevented legitimate placements while moving
+        // and did not reliably address server-side movement corrections.
+        if (player.getBoundingBox().intersects(new Box(target))) return;
 
         Block wantedBlock = wanted.getBlock();
         if (!isBlock(player.getMainHandStack(), wantedBlock)) {
