@@ -11,8 +11,8 @@
     "client": ["de.mapartassist.MapArtAssistClient"]
   },
   "depends": {
-    "fabricloader": ">=0.16.0",
-    "minecraft": "~1.21.4",
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~1.21.11",
     "java": ">=21",
     "fabric-api": "*"
   },

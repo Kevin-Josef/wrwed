@@ -11,6 +11,7 @@ import net.minecraft.client.util.InputUtil;
 import net.minecraft.item.BlockItem;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import org.lwjgl.glfw.GLFW;
@@ -18,6 +19,8 @@ import org.lwjgl.glfw.GLFW;
 public class MapArtAssistClient implements ClientModInitializer {
     public static KeyBinding toggleKey;
     public static KeyBinding guiKey;
+    private static final KeyBinding.Category CATEGORY =
+            KeyBinding.Category.create(Identifier.of("mapartassist", "main"));
 
     private int cooldown = 0;
 
@@ -26,9 +29,9 @@ public class MapArtAssistClient implements ClientModInitializer {
         ModConfig.load();
 
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, "category.mapartassist"));
+                "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY));
         guiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.mapartassist.gui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, "category.mapartassist"));
+                "key.mapartassist.gui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
     }
