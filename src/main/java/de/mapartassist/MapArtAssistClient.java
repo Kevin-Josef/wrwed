@@ -131,9 +131,30 @@ public class MapArtAssistClient implements ClientModInitializer {
         // a carpet placed exactly in the block space beneath the player's feet can
         // cause client/server collision corrections even when the full block boxes
         // only touch at their boundary. Expand the target slightly upward and sideways.
-        Box playerSafety = player.getBoundingBox().expand(0.12, 0.18, 0.12);
         Box targetSafety = new Box(target).expand(0.08, 0.16, 0.08);
-        if (playerSafety.intersects(targetSafety)) return;
+
+        // Also reserve the player's immediate forward movement corridor. A carpet
+        // placed just outside the current bounding box can still be hit on the next
+        // movement tick, causing step-up / server position correction on multiplayer.
+        // Project in the current horizontal movement direction; if nearly stationary,
+        // use the view direction so the player can still aim ahead while starting to walk.
+        Box playerSafety = player.getBoundingBox().expand(0.08, 0.12, 0.08);
+        double vx = player.getVelocity().x;
+        double vz = player.getVelocity().z;
+        double horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
+        double dx;
+        double dz;
+        if (horizontalSpeed > 0.03) {
+            dx = vx / horizontalSpeed;
+            dz = vz / horizontalSpeed;
+        } else {
+            double yaw = Math.toRadians(player.getYaw());
+            dx = -Math.sin(yaw);
+            dz = Math.cos(yaw);
+        }
+        // Keep roughly one short movement step clear in front of the player.
+        Box movementCorridor = playerSafety.stretch(dx * 0.85, 0.0, dz * 0.85);
+        if (playerSafety.intersects(targetSafety) || movementCorridor.intersects(targetSafety)) return;
 
         Block wantedBlock = wanted.getBlock();
         if (!isBlock(player.getMainHandStack(), wantedBlock)) {
