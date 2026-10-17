@@ -96,6 +96,16 @@ public class MapArtAssistClient implements ClientModInitializer {
             return;
         }
 
+        // Multiplayer safety test: defer block interactions while the player is
+        // moving at normal walking speed. Some servers correct player movement when
+        // a newly placed carpet collides with the player's next movement step.
+        // The pending-placement confirmation above still runs first, so accepted
+        // placements can be confirmed while moving; only new placements are paused.
+        double vx = client.player.getVelocity().x;
+        double vz = client.player.getVelocity().z;
+        double horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
+        if (horizontalSpeed > 0.075) return;
+
         tryPlace(client, cfg);
         if (LitematicaBridge.isMissing() && !warnedMissing) {
             warnedMissing = true;
