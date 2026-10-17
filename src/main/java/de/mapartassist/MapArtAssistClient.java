@@ -158,11 +158,11 @@ public class MapArtAssistClient implements ClientModInitializer {
         // regular input handler call doItemUse()/interactBlock with its own cooldown
         // and swing behavior instead of calling interactBlock directly from this tick.
         // The normal hit result is deliberately left untouched.
-        KeyBinding.onKeyPressed(client.options.useKey.getDefaultKey());
+        KeyBinding.onKeyPressed(client.options.useKey.getBoundKey());
         pendingPos = target.toImmutable();
         pendingBlock = wantedBlock;
         pendingTicks = 0;
-        cooldown = Math.max(4, cfg.delayTicks);
+        cooldown = Math.max(2, cfg.delayTicks);
     }
 
     private static boolean isBlock(ItemStack stack, Block block) {
