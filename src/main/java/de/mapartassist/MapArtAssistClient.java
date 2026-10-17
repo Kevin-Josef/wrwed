@@ -44,6 +44,13 @@ public class MapArtAssistClient implements ClientModInitializer {
     private Block pendingBlock = null;
     private int pendingTicks = 0;
 
+    // Require the crosshair target to remain stable briefly before queuing a use press.
+    // This prevents the held block for one schematic target from being placed at a
+    // different target if the player flicks the camera between validation and input.
+    private BlockPos lastAimTarget = null;
+    private Direction lastAimSide = null;
+    private int aimStableTicks = 0;
+
     @Override
     public void onInitializeClient() {
         ModConfig.load();
@@ -69,7 +76,14 @@ public class MapArtAssistClient implements ClientModInitializer {
         }
 
         if (!cfg.autoPlace || client.player == null || client.world == null
-                || client.currentScreen != null || client.interactionManager == null) return;
+                || client.currentScreen != null || client.interactionManager == null) {
+            lastAimTarget = null;
+            lastAimSide = null;
+            aimStableTicks = 0;
+            return;
+        }
+
+        updateAimStability(client);
 
         if (pendingPos != null) {
             // Count down the normal-use interval while awaiting the world update.
@@ -126,6 +140,13 @@ public class MapArtAssistClient implements ClientModInitializer {
 
         // Place into the adjacent position on the face actually hit.
         BlockPos target = hit.getBlockPos().offset(hit.getSide());
+
+        // The use key is processed by vanilla after this tick callback. If the
+        // crosshair is moving rapidly, the hit result may change before that happens.
+        // Wait until the target has been stable for at least two client ticks.
+        if (aimStableTicks < 2 || lastAimTarget == null
+                || !lastAimTarget.equals(target) || lastAimSide != hit.getSide()) return;
+
         BlockState wanted = schematic.getBlockState(target);
         if (wanted.isAir()) return;
 
@@ -158,11 +179,30 @@ public class MapArtAssistClient implements ClientModInitializer {
         // regular input handler call doItemUse()/interactBlock with its own cooldown
         // and swing behavior instead of calling interactBlock directly from this tick.
         // The normal hit result is deliberately left untouched.
-        KeyBinding.onKeyPressed(client.options.useKey.getDefaultKey());
+        KeyBinding.onKeyPressed(client.options.useKey.getBoundKey());
         pendingPos = target.toImmutable();
         pendingBlock = wantedBlock;
         pendingTicks = 0;
-        cooldown = Math.max(2, cfg.delayTicks);
+        cooldown = Math.max(4, cfg.delayTicks);
+    }
+
+    private void updateAimStability(MinecraftClient client) {
+        if (client.crosshairTarget instanceof BlockHitResult hit
+                && hit.getType() == HitResult.Type.BLOCK
+                && client.player.getEyePos().squaredDistanceTo(hit.getPos()) <= REACH * REACH) {
+            BlockPos target = hit.getBlockPos().offset(hit.getSide());
+            if (target.equals(lastAimTarget) && hit.getSide() == lastAimSide) {
+                aimStableTicks = Math.min(aimStableTicks + 1, 20);
+            } else {
+                lastAimTarget = target.toImmutable();
+                lastAimSide = hit.getSide();
+                aimStableTicks = 1;
+            }
+        } else {
+            lastAimTarget = null;
+            lastAimSide = null;
+            aimStableTicks = 0;
+        }
     }
 
     private static boolean isBlock(ItemStack stack, Block block) {
