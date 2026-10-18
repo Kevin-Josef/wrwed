@@ -1,7 +1,7 @@
 package de.mapartassist;
 
 import de.mapartassist.config.ModConfig;
-import de.mapartassist.gui.MainScreen;
+import de.mapartassist.gui.MenuScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -142,7 +142,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (tickCounter % 40 == 0) recentAttempts.values().removeIf(t -> tickCounter - t > 40);
         if (messageCooldown > 0) messageCooldown--;
 
-        while (guiKey.wasPressed()) client.setScreen(new MainScreen(null));
+        while (guiKey.wasPressed()) client.setScreen(new MenuScreen(null));
         while (toggleKey.wasPressed()) {
             cfg.autoPlace = !cfg.autoPlace;
             ModConfig.save();
