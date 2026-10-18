@@ -59,6 +59,9 @@ public class MapArtAssistClient implements ClientModInitializer {
                 "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY));
         guiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.gui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, CATEGORY));
+        // The guard runs BEFORE vanilla processes input for the tick, i.e. right before
+        // our synthetic right-click would actually be used.
+        ClientTickEvents.START_CLIENT_TICK.register(this::guardClick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
     }
 
@@ -78,27 +81,6 @@ public class MapArtAssistClient implements ClientModInitializer {
 
         if (!cfg.autoPlace || client.player == null || client.world == null
                 || client.currentScreen != null || client.interactionManager == null) return;
-
-        if (queuedHitPos != null) {
-            if (!(client.crosshairTarget instanceof BlockHitResult queuedHit)
-                    || queuedHit.getType() != HitResult.Type.BLOCK
-                    || !queuedHit.getBlockPos().equals(queuedHitPos)
-                    || queuedHit.getSide() != queuedHitSide
-                    || queuedBlock == null
-                    || !isBlock(client.player.getMainHandStack(), queuedBlock)) {
-                clearQueuedPlacement();
-                return;
-            }
-
-            // Only generate the click after confirming the aim and held carpet are unchanged.
-            KeyBinding.onKeyPressed(client.options.useKey.getDefaultKey());
-            pendingPos = queuedTarget.toImmutable();
-            pendingBlock = queuedBlock;
-            pendingTicks = 0;
-            clearQueuedPlacement();
-            cooldown = Math.max(1, cfg.delayTicks);
-            return;
-        }
 
         if (pendingPos != null) {
             // Count down the normal-use interval while awaiting the world update.
@@ -184,18 +166,51 @@ public class MapArtAssistClient implements ClientModInitializer {
             return;
         }
 
-        // Use vanilla's normal input handler for smoother movement. Verify that
-        // the same target is still current immediately before queueing the click.
-        if (!(client.crosshairTarget instanceof BlockHitResult currentHit)
-                || currentHit.getType() != HitResult.Type.BLOCK
-                || !currentHit.getBlockPos().equals(hit.getBlockPos())
-                || currentHit.getSide() != hit.getSide()) return;
+        // Click through vanilla's normal input handler (smooth movement). The click is
+        // consumed at the start of the next tick; guardClick() re-checks everything
+        // right before that and cancels the click if the situation changed.
         queuedHitPos = hit.getBlockPos().toImmutable();
         queuedHitSide = hit.getSide();
         queuedTarget = target.toImmutable();
         queuedBlock = wantedBlock;
-        // Validate on the next tick before creating the click.
-        cooldown = 1;
+        KeyBinding.onKeyPressed(client.options.useKey.getDefaultKey());
+        pendingPos = target.toImmutable();
+        pendingBlock = wantedBlock;
+        pendingTicks = 0;
+        cooldown = Math.max(1, cfg.delayTicks);
+    }
+
+    /**
+     * Runs at the very start of a tick, before vanilla handles the use key. If the
+     * crosshair moved to another block/face, the held item changed, or the schematic
+     * wants a different block at the target, the queued click is thrown away.
+     */
+    private void guardClick(MinecraftClient client) {
+        if (queuedHitPos == null) return;
+
+        boolean valid = client.player != null && client.world != null
+                && client.crosshairTarget instanceof BlockHitResult h
+                && h.getType() == HitResult.Type.BLOCK
+                && h.getBlockPos().equals(queuedHitPos)
+                && h.getSide() == queuedHitSide
+                && queuedBlock != null
+                && isBlock(client.player.getMainHandStack(), queuedBlock);
+
+        if (valid) {
+            World schematic = LitematicaBridge.getSchematicWorld();
+            valid = schematic != null
+                    && schematic.getBlockState(queuedTarget).getBlock() == queuedBlock;
+        }
+
+        if (!valid) {
+            // Consume the click we queued so vanilla never sees it.
+            while (client.options.useKey.wasPressed()) { /* drain */ }
+            pendingPos = null;
+            pendingBlock = null;
+            pendingTicks = 0;
+            cooldown = 0;
+        }
+        clearQueuedPlacement();
     }
 
     private void clearQueuedPlacement() {
