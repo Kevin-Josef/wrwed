@@ -59,6 +59,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     // Per-frame placement (runs every rendered frame, not only every 20th of a second).
     private long tickCounter = 0;
     private long lastPlaceTick = -1000;
+    private int placedThisTick = 0;
     private final Map<BlockPos, Long> recentAttempts = new HashMap<>();
 
 
@@ -82,13 +83,15 @@ public class MapArtAssistClient implements ClientModInitializer {
     /** Called every rendered frame. Places directly with the exact, freshly validated crosshair hit. */
     private void onFrame(MinecraftClient client) {
         ModConfig cfg = ModConfig.get();
-        if (!cfg.perFramePlacing || !cfg.autoPlace) return;
+        if (!cfg.frameMode || !cfg.autoPlace) return;
         if (client.player == null || client.world == null || client.currentScreen != null
                 || client.interactionManager == null) return;
         if (cooldown > 0) return; // set by inventory switching, counted down in onTick
 
         // Interval in ticks between placements; 0 = every single frame.
         if (cfg.delayTicks > 0 && tickCounter - lastPlaceTick < cfg.delayTicks) return;
+        // Limit packets per tick: a flood of placements makes the server correct the player (stutter).
+        if (placedThisTick >= Math.max(1, cfg.maxPerTick)) return;
 
         ClientPlayerEntity player = client.player;
         World schematic = LitematicaBridge.getSchematicWorld();
@@ -129,11 +132,13 @@ public class MapArtAssistClient implements ClientModInitializer {
         client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
         player.swingHand(Hand.MAIN_HAND);
         lastPlaceTick = tickCounter;
+        placedThisTick++;
     }
 
     private void onTick(MinecraftClient client) {
         ModConfig cfg = ModConfig.get();
         tickCounter++;
+        placedThisTick = 0;
         if (tickCounter % 40 == 0) recentAttempts.values().removeIf(t -> tickCounter - t > 40);
         if (messageCooldown > 0) messageCooldown--;
 
@@ -150,7 +155,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (!cfg.autoPlace || client.player == null || client.world == null
                 || client.currentScreen != null || client.interactionManager == null) return;
 
-        if (cfg.perFramePlacing) {
+        if (cfg.frameMode) {
             if (cooldown > 0) cooldown--;
             return;
         }

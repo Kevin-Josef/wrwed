@@ -21,7 +21,9 @@ public class ModConfig {
     public boolean takeFromInventory = true;
     public int delayTicks = 4;
     /** true = place every rendered frame (fast). false = old tick-based click (slower, fallback). */
-    public boolean perFramePlacing = true;
+    public boolean frameMode = false;
+    /** Frame mode only: max placements per tick (1 = smoothest, higher = faster but may stutter). */
+    public int maxPerTick = 2;
     public int accentColor = DEFAULT_ACCENT; // RGB
     public int bgColor = DEFAULT_BG;         // RGB
 
