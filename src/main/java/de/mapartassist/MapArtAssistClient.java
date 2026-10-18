@@ -83,8 +83,6 @@ public class MapArtAssistClient implements ClientModInitializer {
                 || client.currentScreen != null || client.interactionManager == null) return;
 
         if (pendingPos != null) {
-            // Count down the normal-use interval while awaiting the world update.
-            if (cooldown > 0) cooldown--;
             pendingTicks++;
             BlockState observed = client.world.getBlockState(pendingPos);
 
@@ -177,7 +175,9 @@ public class MapArtAssistClient implements ClientModInitializer {
         pendingPos = target.toImmutable();
         pendingBlock = wantedBlock;
         pendingTicks = 0;
-        cooldown = Math.max(1, cfg.delayTicks);
+        // delayTicks = ticks between two placements. 0 and 1 both mean "every tick"
+        // (Minecraft processes input once per tick, so that is the maximum speed).
+        cooldown = Math.max(0, cfg.delayTicks - 1);
     }
 
     /**
