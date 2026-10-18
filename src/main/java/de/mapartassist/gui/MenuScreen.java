@@ -2,24 +2,29 @@ package de.mapartassist.gui;
 
 import de.mapartassist.cape.CapeCreator;
 import de.mapartassist.cape.CapeManager;
+import de.mapartassist.cape.CapePreview;
 import de.mapartassist.config.ModConfig;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 
 /**
- * Hauptmenue der Mod: links die Reiter (Features), rechts der Inhalt.
- * Neue Features = neuen Eintrag in {@link Tab} + einen Block in init()/render().
+ * Hauptmenue (v2 Design): eigene, animierte Bedienelemente. Mausbedienung wird direkt ueber GLFW
+ * abgefragt, daher keine Abhaengigkeit von den Maus-Event-Signaturen.
+ * Neue Features = neuer Eintrag im {@link Tab}-Enum + ein Block in build().
  */
 public class MenuScreen extends Screen {
     private enum Tab {
@@ -32,236 +37,424 @@ public class MenuScreen extends Screen {
         Tab(String label) { this.label = label; }
     }
 
-    private static final int W = 380, H = 250, SIDE = 96;
-    private static final int S = 100;        // Groesse des Farbfelds
-    private static final int HUE_W = 14;     // Breite der Farbton-Leiste
+    private static final int W = 440, H = 272, SIDE = 104;
+    private static final int S = 100, HUE_W = 14;
+    private static final int ROW_H = 28, CAPE_ROWS = 5, LIST_W = 196;
 
     // bleiben beim erneuten Oeffnen erhalten
     private static Tab activeTab = Tab.MAPART;
     private static boolean editAccent = true;
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
-    private static final int CAPE_ROWS = 5;
     private static CapeCreator.Fit creatorFit = CapeCreator.Fit.CROP;
     private static CapeCreator.Inner creatorInner = CapeCreator.Inner.MIRROR;
 
     private final Screen parent;
-    private int left, top, cx, cw;
+    private final long t0 = System.nanoTime();
+    private int left, top, cx, cy, cw;
 
-    // Farbwaehler-Zustand (HSV, jeweils 0..1)
-    private float hue, sat, val;
-    private int dragMode = 0; // 0 nichts, 1 Farbfeld, 2 Farbton-Leiste
+    private final List<Control> controls = new ArrayList<>();
+    private Control active = null;
     private boolean wasDown = false;
+    private float tabIndY = -1;
+    private String hoverCape = null;
+
+    // Farbwaehler
+    private float hue, sat, val;
     private TextFieldWidget hexField;
     private boolean suppressHex = false;
 
     public MenuScreen(Screen parent) {
         super(Text.literal("MapArt Assist"));
         this.parent = parent;
+        CapeManager.scan();
+        CapePreview.clear();
     }
 
-    // ------------------------------------------------------------------ Aufbau
+    // ================================================================== Hilfsfunktionen
+
+    private float time() { return (System.nanoTime() - t0) / 1_000_000_000f; }
+
+    private static int mix(int a, int b, float t) {
+        t = Math.max(0, Math.min(1, t));
+        int aa = (int) (((a >>> 24) & 0xFF) + (((b >>> 24) & 0xFF) - ((a >>> 24) & 0xFF)) * t);
+        int r = (int) (((a >> 16) & 0xFF) + (((b >> 16) & 0xFF) - ((a >> 16) & 0xFF)) * t);
+        int g = (int) (((a >> 8) & 0xFF) + (((b >> 8) & 0xFF) - ((a >> 8) & 0xFF)) * t);
+        int bl = (int) ((a & 0xFF) + ((b & 0xFF) - (a & 0xFF)) * t);
+        return (aa << 24) | (r << 16) | (g << 8) | bl;
+    }
+
+    private static int alpha(int c, float a) {
+        return ((int) (255 * Math.max(0, Math.min(1, a))) << 24) | (c & 0xFFFFFF);
+    }
+
+    private static void outline(DrawContext ctx, int x, int y, int w, int h, int color) {
+        ctx.fill(x, y, x + w, y + 1, color);
+        ctx.fill(x, y + h - 1, x + w, y + h, color);
+        ctx.fill(x, y, x + 1, y + h, color);
+        ctx.fill(x + w - 1, y, x + w, y + h, color);
+    }
+
+    private static float clamp01(double v) { return (float) Math.max(0, Math.min(1, v)); }
+
+    private void text(DrawContext ctx, String s, int x, int y, int color) {
+        ctx.drawTextWithShadow(textRenderer, s, x, y, color);
+    }
+
+    private void textCentered(DrawContext ctx, String s, int cxp, int y, int color) {
+        ctx.drawTextWithShadow(textRenderer, s, cxp - textRenderer.getWidth(s) / 2, y, color);
+    }
+
+    // ================================================================== Steuerelemente
+
+    private abstract class Control {
+        int x, y, w, h;
+        float hover = 0;
+
+        boolean contains(int mx, int my) { return mx >= x && mx < x + w && my >= y && my < y + h; }
+
+        void animateHover(int mx, int my, boolean enabled) {
+            float target = enabled && contains(mx, my) ? 1f : 0f;
+            hover += (target - hover) * 0.3f;
+        }
+
+        abstract void draw(DrawContext ctx, int mx, int my);
+        void press(int mx, int my) { }
+        void drag(int mx, int my) { }
+    }
+
+    private class Btn extends Control {
+        final Supplier<String> label;
+        final Runnable run;
+        BooleanSupplier enabled = () -> true;
+        BooleanSupplier selected = () -> false;
+
+        Btn(int x, int y, int w, int h, Supplier<String> label, Runnable run) {
+            this.x = x; this.y = y; this.w = w; this.h = h; this.label = label; this.run = run;
+        }
+
+        Btn enabledIf(BooleanSupplier e) { enabled = e; return this; }
+        Btn selectedIf(BooleanSupplier s) { selected = s; return this; }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            boolean en = enabled.getAsBoolean();
+            animateHover(mx, my, en);
+            int acc = Theme.accent();
+            int base = selected.getAsBoolean() ? alpha(acc, 0.35f) : 0xFF2A2A36;
+            int bg = mix(base, alpha(acc, 0.45f), hover * 0.7f);
+            ctx.fill(x, y, x + w, y + h, en ? bg : 0xFF22222A);
+            if (en && (hover > 0.05f || selected.getAsBoolean())) {
+                ctx.fill(x, y + h - 2, x + w, y + h, alpha(acc, selected.getAsBoolean() ? 1f : hover));
+            }
+            textCentered(ctx, label.get(), x + w / 2, y + (h - 8) / 2, en ? 0xFFFFFFFF : 0xFF666672);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            if (enabled.getAsBoolean()) run.run();
+        }
+    }
+
+    private class TabBtn extends Control {
+        final Tab tab;
+
+        TabBtn(int x, int y, int w, int h, Tab tab) {
+            this.x = x; this.y = y; this.w = w; this.h = h; this.tab = tab;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            boolean on = tab == activeTab;
+            animateHover(mx, my, true);
+            if (on) ctx.fill(x, y, x + w, y + h, alpha(Theme.accent(), 0.22f));
+            else if (hover > 0.02f) ctx.fill(x, y, x + w, y + h, alpha(0xFFFFFF, 0.08f * hover));
+            int col = on ? 0xFFFFFFFF : mix(0xFF9A9AA8, 0xFFFFFFFF, hover);
+            text(ctx, tab.label, x + 10 + (int) (hover * 2), y + (h - 8) / 2, col);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            if (activeTab != tab) {
+                activeTab = tab;
+                clearAndInit();
+            }
+        }
+    }
+
+    private class Tog extends Control {
+        final String name;
+        final BooleanSupplier get;
+        final Consumer<Boolean> set;
+        float anim;
+
+        Tog(int x, int y, int w, String name, BooleanSupplier get, Consumer<Boolean> set) {
+            this.x = x; this.y = y; this.w = w; this.h = 22;
+            this.name = name; this.get = get; this.set = set;
+            this.anim = get.getAsBoolean() ? 1f : 0f;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            anim += ((get.getAsBoolean() ? 1f : 0f) - anim) * 0.35f;
+            if (hover > 0.02f) ctx.fill(x, y, x + w, y + h, alpha(0xFFFFFF, 0.07f * hover));
+            text(ctx, name, x + 6, y + 7, 0xFFFFFFFF);
+            int tx = x + w - 34, ty = y + 5;
+            ctx.fill(tx, ty, tx + 28, ty + 12, mix(0xFF3A3A48, Theme.accent() | 0xFF000000, anim));
+            int kx = tx + 2 + Math.round(anim * 16);
+            ctx.fill(kx, ty + 2, kx + 8, ty + 10, 0xFFFFFFFF);
+        }
+
+        @Override
+        void press(int mx, int my) { set.accept(!get.getAsBoolean()); }
+    }
+
+    private class Sld extends Control {
+        final String name, unit;
+        final int min, max;
+        final IntSupplier get;
+        final IntConsumer set;
+
+        Sld(int x, int y, int w, String name, String unit, int min, int max, IntSupplier get, IntConsumer set) {
+            this.x = x; this.y = y; this.w = w; this.h = 26;
+            this.name = name; this.unit = unit; this.min = min; this.max = max; this.get = get; this.set = set;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            int v = get.getAsInt();
+            text(ctx, name + ": " + v + unit, x + 2, y, 0xFFFFFFFF);
+            int ty = y + 14, th = 6;
+            ctx.fill(x, ty, x + w, ty + th, 0xFF2A2A36);
+            float f = (v - min) / (float) (max - min);
+            int fw = Math.round(f * (w - 1));
+            ctx.fill(x, ty, x + fw, ty + th, Theme.accent());
+            int kx = x + fw - 2;
+            ctx.fill(kx, ty - 3, kx + 5, ty + th + 3, mix(0xFFCCCCCC, 0xFFFFFFFF, hover));
+        }
+
+        private void setFrom(int mx) {
+            float f = clamp01((mx - x) / (double) (w - 1));
+            set.accept(min + Math.round(f * (max - min)));
+        }
+
+        @Override
+        void press(int mx, int my) { setFrom(mx); }
+
+        @Override
+        void drag(int mx, int my) { setFrom(mx); }
+    }
+
+    private class CapeRow extends Control {
+        final CapeManager.Entry e;
+
+        CapeRow(int x, int y, int w, CapeManager.Entry e) {
+            this.x = x; this.y = y; this.w = w; this.h = ROW_H - 2; this.e = e;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            boolean sel = e.name().equals(ModConfig.get().selectedCape);
+            int acc = Theme.accent();
+            int bg = sel ? alpha(acc, 0.20f + 0.06f * (float) Math.sin(time() * 3)) : 0xFF262631;
+            bg = mix(bg, alpha(acc, 0.30f), hover * 0.6f);
+            ctx.fill(x, y, x + w, y + h, bg);
+            if (sel) ctx.fill(x, y, x + 3, y + h, acc);
+            if (hover > 0.5f) hoverCape = e.name();
+
+            // Mini-Vorschau
+            CapePreview.Data d = CapePreview.get(e.name());
+            int tx = x + 8, ty = y + 2, tw = 14, th = h - 4;
+            ctx.fill(tx - 1, ty - 1, tx + tw + 1, ty + th + 1, 0xFF111118);
+            if (d != null) drawGrid(ctx, d.outer(), tx, ty, tw, th, 1f);
+            else text(ctx, "?", tx + 4, ty + 6, 0xFF888888);
+
+            text(ctx, e.name(), x + 30, y + 5, sel ? 0xFFFFFFFF : 0xFFDDDDDD);
+            if (e.hasElytra()) text(ctx, "+ Elytra", x + 30, y + 15, 0xFF7C8A99);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            CapeManager.select(e.name());
+        }
+    }
+
+    private class PickerControl extends Control {
+        int mode = 0; // 1 Farbfeld, 2 Farbton
+
+        PickerControl(int x, int y) {
+            this.x = x; this.y = y; this.w = S + 10 + HUE_W; this.h = S;
+        }
+
+        @Override
+        boolean contains(int mx, int my) {
+            return my >= y && my < y + S && ((mx >= x && mx < x + S) || (mx >= x + S + 10 && mx < x + S + 10 + HUE_W));
+        }
+
+        @Override
+        void press(int mx, int my) {
+            mode = mx < x + S + 5 ? 1 : 2;
+            drag(mx, my);
+        }
+
+        @Override
+        void drag(int mx, int my) {
+            if (mode == 1) {
+                sat = clamp01((mx - x) / (double) (S - 1));
+                val = 1f - clamp01((my - y) / (double) (S - 1));
+            } else if (mode == 2) {
+                hue = clamp01((my - y) / (double) (S - 1));
+            }
+            applyHsv();
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            int hx = x + S + 10;
+            for (int i = 0; i < S; i++) {
+                int topColor = 0xFF000000 | hsvToRgb(hue, i / (float) (S - 1), 1f);
+                ctx.fillGradient(x + i, y, x + i + 1, y + S, topColor, 0xFF000000);
+            }
+            outline(ctx, x - 1, y - 1, S + 2, S + 2, 0xFF000000);
+            int px = x + Math.round(sat * (S - 1)), py = y + Math.round((1f - val) * (S - 1));
+            outline(ctx, px - 3, py - 3, 7, 7, 0xFFFFFFFF);
+            outline(ctx, px - 4, py - 4, 9, 9, 0xFF000000);
+
+            for (int i = 0; i < S; i++) {
+                ctx.fill(hx, y + i, hx + HUE_W, y + i + 1, 0xFF000000 | hsvToRgb(i / (float) (S - 1), 1f, 1f));
+            }
+            outline(ctx, hx - 1, y - 1, HUE_W + 2, S + 2, 0xFF000000);
+            int hy = y + Math.round(hue * (S - 1));
+            ctx.fill(hx - 2, hy - 1, hx + HUE_W + 2, hy + 2, 0xFFFFFFFF);
+            outline(ctx, hx - 2, hy - 1, HUE_W + 4, 3, 0xFF000000);
+        }
+    }
+
+    // ================================================================== Aufbau
 
     @Override
     protected void init() {
         left = (width - W) / 2;
         top = (height - H) / 2;
-        cx = left + SIDE + 8;
-        cw = W - SIDE - 16;
+        cx = left + SIDE + 14;
+        cy = top + 40;
+        cw = W - SIDE - 28;
+        controls.clear();
+        active = null;
+        hexField = null;
 
-        // Reiter links
         Tab[] tabs = Tab.values();
         for (int i = 0; i < tabs.length; i++) {
-            Tab t = tabs[i];
-            ButtonWidget b = ButtonWidget.builder(Text.literal(t.label), btn -> {
-                activeTab = t;
-                clearAndInit();
-            }).dimensions(left + 8, top + 30 + i * 24, SIDE - 12, 20).build();
-            b.active = t != activeTab;
-            addDrawableChild(b);
+            controls.add(new TabBtn(left + 6, top + 40 + i * 26, SIDE - 12, 22, tabs[i]));
         }
-        addDrawableChild(ButtonWidget.builder(Text.literal("Fertig"), b -> close())
-                .dimensions(left + 8, top + H - 28, SIDE - 12, 20).build());
+        controls.add(new Btn(left + 8, top + H - 30, SIDE - 16, 20, () -> "Fertig", this::close));
 
         switch (activeTab) {
-            case MAPART -> initMapArt();
-            case LOOK -> initLook();
-            case CAPES -> initCapes();
-            case CREATOR -> initCreator();
+            case MAPART -> buildMapArt();
+            case LOOK -> buildLook();
+            case CAPES -> buildCapes();
+            case CREATOR -> buildCreator();
         }
     }
 
-    private void initMapArt() {
+    private void buildMapArt() {
         ModConfig cfg = ModConfig.get();
-
-        addDrawableChild(ButtonWidget.builder(onOff("Auto-Platzieren", cfg.autoPlace), b -> {
-            cfg.autoPlace = !cfg.autoPlace;
-            b.setMessage(onOff("Auto-Platzieren", cfg.autoPlace));
-        }).dimensions(cx, top + 30, cw, 20).build());
-
-        addDrawableChild(ButtonWidget.builder(onOff("Block aus Inventar holen", cfg.takeFromInventory), b -> {
-            cfg.takeFromInventory = !cfg.takeFromInventory;
-            b.setMessage(onOff("Block aus Inventar holen", cfg.takeFromInventory));
-        }).dimensions(cx, top + 56, cw, 20).build());
-
-        addDrawableChild(new DelaySlider(cx, top + 82, cw, 20));
-
-        addDrawableChild(ButtonWidget.builder(onOff("Frame-Modus (experimentell)", cfg.frameMode), b -> {
-            cfg.frameMode = !cfg.frameMode;
-            b.setMessage(onOff("Frame-Modus (experimentell)", cfg.frameMode));
-        }).dimensions(cx, top + 118, cw, 20).build());
-
-        addDrawableChild(new MaxPerTickSlider(cx, top + 144, cw, 20));
+        controls.add(new Tog(cx, cy, cw, "Auto-Platzieren", () -> cfg.autoPlace, v -> cfg.autoPlace = v));
+        controls.add(new Tog(cx, cy + 26, cw, "Block aus Inventar holen",
+                () -> cfg.takeFromInventory, v -> cfg.takeFromInventory = v));
+        controls.add(new Sld(cx, cy + 62, cw, "Verzögerung", " Ticks", 0, 10,
+                () -> cfg.delayTicks, v -> cfg.delayTicks = v));
+        controls.add(new Tog(cx, cy + 112, cw, "Frame-Modus (experimentell)", () -> cfg.frameMode, v -> cfg.frameMode = v));
+        controls.add(new Sld(cx, cy + 142, cw, "Max. pro Tick (Frame-Modus)", "", 1, 4,
+                () -> Math.max(1, Math.min(4, cfg.maxPerTick)), v -> cfg.maxPerTick = v));
     }
 
-    private void initLook() {
+    private void buildLook() {
         int half = (cw - 4) / 2;
-        ButtonWidget accentBtn = ButtonWidget.builder(Text.literal("Akzentfarbe"), b -> {
-            editAccent = true;
-            clearAndInit();
-        }).dimensions(cx, top + 30, half, 20).build();
-        accentBtn.active = !editAccent;
-        addDrawableChild(accentBtn);
-
-        ButtonWidget bgBtn = ButtonWidget.builder(Text.literal("Hintergrund"), b -> {
-            editAccent = false;
-            clearAndInit();
-        }).dimensions(cx + half + 4, top + 30, half, 20).build();
-        bgBtn.active = editAccent;
-        addDrawableChild(bgBtn);
+        controls.add(new Btn(cx, cy, half, 20, () -> "Akzentfarbe", () -> { editAccent = true; clearAndInit(); })
+                .selectedIf(() -> editAccent));
+        controls.add(new Btn(cx + half + 4, cy, half, 20, () -> "Hintergrund", () -> { editAccent = false; clearAndInit(); })
+                .selectedIf(() -> !editAccent));
 
         int rgb = editedColor();
         float[] hsv = rgbToHsv(rgb);
-        hue = hsv[0];
-        sat = hsv[1];
-        val = hsv[2];
+        hue = hsv[0]; sat = hsv[1]; val = hsv[2];
 
-        int rx = cx + S + HUE_W + 24;      // rechte Spalte neben dem Picker
-        int rw = cx + cw - rx;
+        controls.add(new PickerControl(cx, cy + 32));
 
-        hexField = new TextFieldWidget(textRenderer, rx, top + 100, 70, 18, Text.literal("Hex"));
+        int rx = cx + S + HUE_W + 28, rw = cx + cw - rx;
+        hexField = new TextFieldWidget(textRenderer, rx, cy + 66, 74, 18, Text.literal("Hex"));
         hexField.setMaxLength(6);
         hexField.setText(String.format("%06X", rgb));
-        hexField.setChangedListener(text -> {
-            if (suppressHex || text.length() != 6) return;
+        hexField.setChangedListener(t -> {
+            if (suppressHex || t.length() != 6) return;
             try {
-                int c = Integer.parseInt(text, 16);
+                int c = Integer.parseInt(t, 16);
                 setEditedColor(c);
                 float[] h = rgbToHsv(c);
-                hue = h[0];
-                sat = h[1];
-                val = h[2];
+                hue = h[0]; sat = h[1]; val = h[2];
             } catch (NumberFormatException ignored) {
             }
         });
         addDrawableChild(hexField);
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Zurücksetzen"), b -> {
+        controls.add(new Btn(rx, cy + 94, rw, 20, () -> "Zurücksetzen", () -> {
             setEditedColor(editAccent ? ModConfig.DEFAULT_ACCENT : ModConfig.DEFAULT_BG);
             clearAndInit();
-        }).dimensions(rx, top + 128, rw, 20).build());
+        }));
     }
 
-    private void initCapes() {
+    private void buildCapes() {
         List<CapeManager.Entry> list = CapeManager.list();
-        String sel = ModConfig.get().selectedCape;
         int maxScroll = Math.max(0, list.size() - CAPE_ROWS);
         capeScroll = Math.max(0, Math.min(capeScroll, maxScroll));
-
-        int listW = cw - 24;
         for (int i = 0; i < CAPE_ROWS; i++) {
             int idx = capeScroll + i;
             if (idx >= list.size()) break;
-            CapeManager.Entry e = list.get(idx);
-            boolean selected = e.name().equals(sel);
-            String label = (selected ? "✔ " : "") + e.name() + (e.hasElytra() ? "  (+ Elytra)" : "");
-            ButtonWidget row = ButtonWidget.builder(Text.literal(label), b -> {
-                CapeManager.select(e.name());
-                clearAndInit();
-            }).dimensions(cx, top + 48 + i * 22, listW, 20).build();
-            row.active = !selected;
-            addDrawableChild(row);
+            controls.add(new CapeRow(cx, cy + i * ROW_H, LIST_W, list.get(idx)));
         }
+        int ay = cy + CAPE_ROWS * ROW_H + 2;
+        controls.add(new Btn(cx, ay, 26, 18, () -> "▲", () -> { capeScroll--; clearAndInit(); })
+                .enabledIf(() -> capeScroll > 0));
+        controls.add(new Btn(cx + 30, ay, 26, 18, () -> "▼", () -> { capeScroll++; clearAndInit(); })
+                .enabledIf(() -> capeScroll < maxScroll));
 
-        ButtonWidget up = ButtonWidget.builder(Text.literal("▲"), b -> {
-            capeScroll--;
+        int by = ay + 24, bw = (LIST_W - 8) / 3;
+        controls.add(new Btn(cx, by, bw, 20, () -> "Keins", () -> { CapeManager.select(""); })
+                .enabledIf(() -> !ModConfig.get().selectedCape.isEmpty()));
+        controls.add(new Btn(cx + bw + 4, by, bw, 20, () -> "Löschen", () -> {
+            CapeManager.delete(ModConfig.get().selectedCape);
             clearAndInit();
-        }).dimensions(cx + listW + 4, top + 48, 20, 20).build();
-        up.active = capeScroll > 0;
-        addDrawableChild(up);
-
-        ButtonWidget down = ButtonWidget.builder(Text.literal("▼"), b -> {
-            capeScroll++;
-            clearAndInit();
-        }).dimensions(cx + listW + 4, top + 48 + (CAPE_ROWS - 1) * 22, 20, 20).build();
-        down.active = capeScroll < maxScroll;
-        addDrawableChild(down);
-
-        int bw = (cw - 8) / 3;
-        ButtonWidget none = ButtonWidget.builder(Text.literal("Keins"), b -> {
-            CapeManager.select("");
-            clearAndInit();
-        }).dimensions(cx, top + 162, bw, 20).build();
-        none.active = sel != null && !sel.isEmpty();
-        addDrawableChild(none);
-
-        ButtonWidget del = ButtonWidget.builder(Text.literal("Löschen"), b -> {
-            CapeManager.delete(sel);
-            clearAndInit();
-        }).dimensions(cx + bw + 4, top + 162, bw, 20).build();
-        del.active = sel != null && !sel.isEmpty() && CapeManager.find(sel) != null;
-        addDrawableChild(del);
-
-        addDrawableChild(ButtonWidget.builder(Text.literal("Ordner"), b -> {
+        }).enabledIf(() -> CapeManager.find(ModConfig.get().selectedCape) != null));
+        controls.add(new Btn(cx + (bw + 4) * 2, by, bw, 20, () -> "Ordner", () -> {
             try {
                 Files.createDirectories(CapeManager.dir());
                 Util.getOperatingSystem().open(CapeManager.dir().toUri());
             } catch (Exception ex) {
                 CapeManager.status = "Ordner konnte nicht geöffnet werden.";
             }
-        }).dimensions(cx + (bw + 4) * 2, top + 162, bw, 20).build());
-
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("Hineingezogene PNG ist: " + (dropAsElytra ? "ELYTRA (zum gewählten Cape)" : "CAPE")),
-                b -> {
-                    dropAsElytra = !dropAsElytra;
-                    b.setMessage(Text.literal("Hineingezogene PNG ist: "
-                            + (dropAsElytra ? "ELYTRA (zum gewählten Cape)" : "CAPE")));
-                }).dimensions(cx, top + 186, cw, 20).build());
+        }));
+        controls.add(new Btn(cx, by + 24, LIST_W, 20,
+                () -> "PNG hineinziehen als: " + (dropAsElytra ? "ELYTRA" : "CAPE"),
+                () -> dropAsElytra = !dropAsElytra));
     }
 
-    private void initCreator() {
-        addDrawableChild(ButtonWidget.builder(Text.literal("Zuschnitt: " + creatorFit.label), b -> {
+    private void buildCreator() {
+        controls.add(new Btn(cx, cy, LIST_W, 20, () -> "Zuschnitt: " + creatorFit.label, () -> {
             CapeCreator.Fit[] v = CapeCreator.Fit.values();
             creatorFit = v[(creatorFit.ordinal() + 1) % v.length];
-            b.setMessage(Text.literal("Zuschnitt: " + creatorFit.label));
-        }).dimensions(cx, top + 30, cw, 20).build());
-
-        addDrawableChild(ButtonWidget.builder(Text.literal("Innenseite: " + creatorInner.label), b -> {
+        }));
+        controls.add(new Btn(cx, cy + 24, LIST_W, 20, () -> "Innenseite: " + creatorInner.label, () -> {
             CapeCreator.Inner[] v = CapeCreator.Inner.values();
             creatorInner = v[(creatorInner.ordinal() + 1) % v.length];
-            b.setMessage(Text.literal("Innenseite: " + creatorInner.label));
-        }).dimensions(cx, top + 56, cw, 20).build());
-
-        addDrawableChild(ButtonWidget.builder(Text.literal("Zur Bibliothek"), b -> {
+        }));
+        controls.add(new Btn(cx, cy + 150, LIST_W, 20, () -> "Zur Bibliothek", () -> {
             activeTab = Tab.CAPES;
             clearAndInit();
-        }).dimensions(cx, top + 186, cw, 20).build());
-    }
-
-    private void renderCreator(DrawContext ctx) {
-        int bx = cx, by = top + 88, bw = cw, bh = 86;
-        ctx.fill(bx, by, bx + bw, by + bh, 0x30FFFFFF);
-        outline(ctx, bx, by, bw, bh, Theme.accent());
-        String l1 = "Bild hier hineinziehen";
-        ctx.drawTextWithShadow(textRenderer, l1, bx + (bw - textRenderer.getWidth(l1)) / 2, by + 26, 0xFFFFFFFF);
-        String l2 = "(PNG oder JPG, am besten hochkant)";
-        ctx.drawTextWithShadow(textRenderer, l2, bx + (bw - textRenderer.getWidth(l2)) / 2, by + 42, 0xFF999999);
-        String status = CapeManager.status;
-        ctx.drawTextWithShadow(textRenderer, status == null || status.isEmpty()
-                ? "Das fertige Cape wird sofort ausgewählt." : status, cx, top + 212,
-                status == null || status.isEmpty() ? 0xFF888888 : 0xFFFFD866);
-        ctx.drawTextWithShadow(textRenderer, "Auflösung bleibt erhalten (kein Verkleinern).", cx, top + 226, 0xFF888888);
+        }));
     }
 
     @Override
@@ -285,15 +478,9 @@ public class MenuScreen extends Screen {
         clearAndInit();
     }
 
-    private static Text onOff(String name, boolean on) {
-        return Text.literal(name + ": " + (on ? "AN" : "AUS")).formatted(on ? Formatting.GREEN : Formatting.RED);
-    }
+    // ================================================================== Farben
 
-    // ------------------------------------------------------------------ Farben
-
-    private int editedColor() {
-        return editAccent ? ModConfig.get().accentColor : ModConfig.get().bgColor;
-    }
+    private int editedColor() { return editAccent ? ModConfig.get().accentColor : ModConfig.get().bgColor; }
 
     private void setEditedColor(int rgb) {
         rgb &= 0xFFFFFF;
@@ -341,119 +528,178 @@ public class MenuScreen extends Screen {
         return new float[]{h, max == 0 ? 0 : d / max, max};
     }
 
-    private static float clamp01(double v) {
-        return (float) Math.max(0, Math.min(1, v));
-    }
-
-    // ------------------------------------------------------------------ Zeichnen
+    // ================================================================== Zeichnen
 
     @Override
     public void renderBackground(DrawContext ctx, int mouseX, int mouseY, float delta) {
         super.renderBackground(ctx, mouseX, mouseY, delta);
-        Theme.panel(ctx, left, top, W, H);
-        // Trennlinie zwischen Reitern und Inhalt
-        ctx.fill(left + SIDE, top + 26, left + SIDE + 1, top + H - 6, Theme.accent());
+        float t = Math.min(1f, time() / 0.25f);
+        float ease = 1f - (1f - t) * (1f - t) * (1f - t);
+        int acc = Theme.accent();
+
+        ctx.fill(0, 0, width, height, alpha(0x000000, 0.35f * ease));
+
+        int bg = Theme.bg();
+        ctx.fillGradient(left, top, left + W, top + H, alpha(mix(bg, 0xFFFFFFFF, 0.07f), 0.96f), alpha(bg, 0.96f));
+        ctx.fill(left, top, left + SIDE, top + H, 0x55000000);
+        ctx.fill(left + SIDE, top + 8, left + SIDE + 1, top + H - 8, alpha(acc, 0.35f));
+        outline(ctx, left, top, W, H, alpha(acc, 0.55f));
+        ctx.fill(left, top, left + Math.round(W * ease), top + 2, acc);
+
+        // Titel
+        text(ctx, "MapArt", left + 10, top + 9, acc);
+        text(ctx, "Assist", left + 10 + textRenderer.getWidth("MapArt "), top + 9, 0xFFFFFFFF);
+        ctx.fill(left + 8, top + 26, left + SIDE - 8, top + 27, alpha(0xFFFFFF, 0.12f));
+
+        // Tab-Indikator (gleitet zum aktiven Reiter)
+        int targetY = top + 40 + activeTab.ordinal() * 26 + 3;
+        if (tabIndY < 0) tabIndY = targetY;
+        tabIndY += (targetY - tabIndY) * 0.28f;
+        ctx.fill(left + 2, Math.round(tabIndY), left + 5, Math.round(tabIndY) + 16, acc);
+
+        // Inhalts-Titel
+        text(ctx, activeTab.label, cx, top + 12, 0xFFFFFFFF);
+        ctx.fill(cx, top + 26, cx + cw, top + 27, alpha(0xFFFFFF, 0.12f));
     }
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        if (activeTab == Tab.LOOK) handlePicker(mouseX, mouseY);
+        // Maus direkt abfragen
+        boolean down = client != null && GLFW.glfwGetMouseButton(
+                client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+        boolean edge = down && !wasDown;
+        wasDown = down;
+        if (edge) {
+            active = null;
+            for (int i = controls.size() - 1; i >= 0; i--) {
+                Control c = controls.get(i);
+                if (c.contains(mouseX, mouseY)) {
+                    active = c;
+                    c.press(mouseX, mouseY);
+                    break;
+                }
+            }
+        } else if (down && active != null) {
+            active.drag(mouseX, mouseY);
+        }
+        if (!down) active = null;
 
-        super.render(ctx, mouseX, mouseY, delta);
+        super.render(ctx, mouseX, mouseY, delta); // Hintergrund + Textfeld
 
-        ctx.drawTextWithShadow(textRenderer, "MapArt Assist", left + 10, top + 9, Theme.accent());
-        ctx.drawTextWithShadow(textRenderer, activeTab.label, cx, top + 9, 0xFFFFFFFF);
+        hoverCape = null;
+        List<Control> snapshot = new ArrayList<>(controls);
+        for (Control c : snapshot) c.draw(ctx, mouseX, mouseY);
 
         switch (activeTab) {
             case MAPART -> {
-                ctx.drawTextWithShadow(textRenderer, "Frame-Modus: ruckelt es, bitte AUS lassen.",
-                        cx, top + 172, 0xFF888888);
-                ctx.drawTextWithShadow(textRenderer, "Weitere Features folgen...",
-                        cx, top + 186, 0xFF888888);
+                text(ctx, "Experimentell", cx, cy + 98, 0xFF7C8A99);
+                ctx.fill(cx + 80, cy + 102, cx + cw, cy + 103, alpha(0xFFFFFF, 0.10f));
+                text(ctx, "Frame-Modus aus lassen, wenn es ruckelt.", cx, cy + 178, 0xFF777783);
             }
-            case LOOK -> renderPicker(ctx);
-            case CREATOR -> renderCreator(ctx);
-            case CAPES -> {
-                ctx.drawTextWithShadow(textRenderer, "Deine Capes (nur für dich sichtbar)", cx, top + 34, 0xFFCCCCCC);
-                if (CapeManager.list().isEmpty()) {
-                    ctx.drawTextWithShadow(textRenderer, "Noch keine Capes in der Bibliothek.", cx, top + 56, 0xFF888888);
-                }
-                String status = CapeManager.status;
-                ctx.drawTextWithShadow(textRenderer, status == null || status.isEmpty()
-                        ? "Cape-PNG (64x32) ins Fenster ziehen." : status, cx, top + 212,
-                        status == null || status.isEmpty() ? 0xFF888888 : 0xFFFFD866);
-                ctx.drawTextWithShadow(textRenderer, "Elytra optional. Ohne eigene nutzt sie das Cape.",
-                        cx, top + 226, 0xFF888888);
+            case LOOK -> renderLook(ctx);
+            case CAPES -> renderCapes(ctx);
+            case CREATOR -> renderCreator(ctx, mouseX, mouseY);
+        }
+    }
+
+    private void renderLook(DrawContext ctx) {
+        int rx = cx + S + HUE_W + 28, rw = cx + cw - rx;
+        text(ctx, "Vorschau", rx, cy + 32, 0xFFCCCCCC);
+        ctx.fill(rx - 1, cy + 43, rx + rw + 1, cy + 63, 0xFF000000);
+        ctx.fill(rx, cy + 44, rx + rw, cy + 62, 0xFF000000 | editedColor());
+        text(ctx, "#", rx - 9, cy + 71, 0xFFCCCCCC);
+        text(ctx, "Farbe im Feld ziehen, rechts den Farbton wählen.", cx, cy + 146, 0xFF777783);
+    }
+
+    private void renderCapes(DrawContext ctx) {
+        List<CapeManager.Entry> list = CapeManager.list();
+        if (list.isEmpty()) {
+            text(ctx, "Noch keine Capes.", cx + 8, cy + 8, 0xFF999999);
+            text(ctx, "PNG ins Fenster ziehen.", cx + 8, cy + 22, 0xFF777783);
+        }
+        text(ctx, list.size() + (list.size() == 1 ? " Cape" : " Capes"), cx + 62, cy + CAPE_ROWS * ROW_H + 7, 0xFF777783);
+
+        String showing = hoverCape != null ? hoverCape : ModConfig.get().selectedCape;
+        int px = cx + LIST_W + 10, pw = cx + cw - px;
+        drawPreviewCard(ctx, showing, px, cy, pw, 150);
+        drawStatus(ctx);
+    }
+
+    private void renderCreator(DrawContext ctx, int mx, int my) {
+        int zx = cx, zy = cy + 52, zw = LIST_W, zh = 90;
+        float pulse = 0.5f + 0.5f * (float) Math.sin(time() * 2.5);
+        ctx.fill(zx, zy, zx + zw, zy + zh, alpha(Theme.accent(), 0.06f + 0.05f * pulse));
+        // gestrichelter, atmender Rand
+        int bc = alpha(Theme.accent(), 0.45f + 0.4f * pulse);
+        for (int i = 0; i < zw; i += 8) {
+            ctx.fill(zx + i, zy, zx + Math.min(i + 4, zw), zy + 1, bc);
+            ctx.fill(zx + i, zy + zh - 1, zx + Math.min(i + 4, zw), zy + zh, bc);
+        }
+        for (int i = 0; i < zh; i += 8) {
+            ctx.fill(zx, zy + i, zx + 1, zy + Math.min(i + 4, zh), bc);
+            ctx.fill(zx + zw - 1, zy + i, zx + zw, zy + Math.min(i + 4, zh), bc);
+        }
+        textCentered(ctx, "Bild hier hineinziehen", zx + zw / 2, zy + 32, 0xFFFFFFFF);
+        textCentered(ctx, "PNG oder JPG, am besten hochkant", zx + zw / 2, zy + 48, 0xFF8A8A96);
+
+        int px = cx + LIST_W + 10, pw = cx + cw - px;
+        drawPreviewCard(ctx, ModConfig.get().selectedCape, px, cy, pw, 150);
+        drawStatus(ctx);
+    }
+
+    private void drawStatus(DrawContext ctx) {
+        String st = CapeManager.status;
+        boolean has = st != null && !st.isEmpty();
+        text(ctx, has ? st : "Capes sind nur für dich sichtbar.", cx, top + H - 20, has ? 0xFFFFD866 : 0xFF777783);
+    }
+
+    /** Karte mit langsam drehendem Cape (Aussen- und Innenseite). */
+    private void drawPreviewCard(DrawContext ctx, String name, int bx, int by, int bw, int bh) {
+        int acc = Theme.accent();
+        ctx.fill(bx, by, bx + bw, by + bh, 0x40000000);
+        outline(ctx, bx, by, bw, bh, alpha(acc, 0.35f));
+
+        CapePreview.Data d = CapePreview.get(name);
+        if (name == null || name.isEmpty() || d == null) {
+            textCentered(ctx, name == null || name.isEmpty() ? "Kein Cape" : "Keine Vorschau", bx + bw / 2, by + bh / 2 - 4, 0xFF777783);
+            return;
+        }
+
+        float t = time();
+        float c = (float) Math.cos(t * 1.1f);
+        int[] grid = c >= 0 ? d.outer() : d.inner();
+        int fullW = Math.min(52, bw - 16), fullH = fullW * 16 / 10;
+        int w = Math.max(2, Math.round(fullW * Math.abs(c)));
+        int x0 = bx + bw / 2 - w / 2;
+        int y0 = by + 20 + Math.round((float) Math.sin(t * 2f) * 2f);
+        float shade = 1f - 0.45f * (1f - Math.abs(c));
+
+        // Stange
+        ctx.fill(bx + bw / 2 - fullW / 2 - 4, y0 - 5, bx + bw / 2 + fullW / 2 + 4, y0 - 3, 0xFF8A8A96);
+        // weicher Schatten
+        ctx.fill(bx + bw / 2 - w / 2 - 2, y0 + fullH + 6, bx + bw / 2 + w / 2 + 2, y0 + fullH + 8, 0x30000000);
+
+        drawGridScaled(ctx, grid, x0, y0, w, fullH, shade);
+
+        textCentered(ctx, name, bx + bw / 2, by + bh - 14, 0xFFFFFFFF);
+    }
+
+    private void drawGrid(DrawContext ctx, int[] grid, int x, int y, int w, int h, float shade) {
+        drawGridScaled(ctx, grid, x, y, w, h, shade);
+    }
+
+    private void drawGridScaled(DrawContext ctx, int[] grid, int x, int y, int w, int h, float shade) {
+        int gw = CapePreview.GW, gh = CapePreview.GH;
+        for (int gy = 0; gy < gh; gy++) {
+            int ya = y + gy * h / gh, yb = Math.max(ya + 1, y + (gy + 1) * h / gh);
+            for (int gx = 0; gx < gw; gx++) {
+                int col = grid[gy * gw + gx];
+                if ((col >>> 24) < 12) continue;
+                int xa = x + gx * w / gw, xb = Math.max(xa + 1, x + (gx + 1) * w / gw);
+                int r = (int) (((col >> 16) & 0xFF) * shade), g = (int) (((col >> 8) & 0xFF) * shade), b = (int) ((col & 0xFF) * shade);
+                ctx.fill(xa, ya, xb, yb, (col & 0xFF000000) | (r << 16) | (g << 8) | b);
             }
         }
-    }
-
-    private void handlePicker(int mouseX, int mouseY) {
-        int px = cx, py = top + 62;
-        int hx = px + S + 10;
-
-        // Mausknopf direkt abfragen, damit Ziehen ohne Maus-Event-Signaturen funktioniert
-        boolean down = client != null && GLFW.glfwGetMouseButton(
-                client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
-
-        if (down && !wasDown) {
-            if (mouseX >= px && mouseX < px + S && mouseY >= py && mouseY < py + S) dragMode = 1;
-            else if (mouseX >= hx && mouseX < hx + HUE_W && mouseY >= py && mouseY < py + S) dragMode = 2;
-        }
-        if (!down) dragMode = 0;
-        wasDown = down;
-
-        if (dragMode == 1) {
-            sat = clamp01((mouseX - px) / (double) (S - 1));
-            val = 1f - clamp01((mouseY - py) / (double) (S - 1));
-            applyHsv();
-        } else if (dragMode == 2) {
-            hue = clamp01((mouseY - py) / (double) (S - 1));
-            applyHsv();
-        }
-    }
-
-    private void renderPicker(DrawContext ctx) {
-        int px = cx, py = top + 62;
-        int hx = px + S + 10;
-        int rx = hx + HUE_W + 10;
-        int rw = cx + cw - rx;
-
-        // Farbfeld: links nach rechts Saettigung, oben nach unten Helligkeit
-        for (int x = 0; x < S; x++) {
-            int topColor = 0xFF000000 | hsvToRgb(hue, x / (float) (S - 1), 1f);
-            ctx.fillGradient(px + x, py, px + x + 1, py + S, topColor, 0xFF000000);
-        }
-        outline(ctx, px - 1, py - 1, S + 2, S + 2, 0xFF000000);
-        int mx = px + Math.round(sat * (S - 1));
-        int my = py + Math.round((1f - val) * (S - 1));
-        outline(ctx, mx - 3, my - 3, 7, 7, 0xFFFFFFFF);
-        outline(ctx, mx - 4, my - 4, 9, 9, 0xFF000000);
-
-        // Farbton-Leiste
-        for (int y = 0; y < S; y++) {
-            ctx.fill(hx, py + y, hx + HUE_W, py + y + 1, 0xFF000000 | hsvToRgb(y / (float) (S - 1), 1f, 1f));
-        }
-        outline(ctx, hx - 1, py - 1, HUE_W + 2, S + 2, 0xFF000000);
-        int hy = py + Math.round(hue * (S - 1));
-        ctx.fill(hx - 2, hy - 1, hx + HUE_W + 2, hy + 2, 0xFFFFFFFF);
-        outline(ctx, hx - 2, hy - 1, HUE_W + 4, 3, 0xFF000000);
-
-        // Vorschau + Beschriftung rechts
-        ctx.drawTextWithShadow(textRenderer, "Vorschau", rx, top + 62, 0xFFCCCCCC);
-        ctx.fill(rx, top + 74, rx + rw, top + 94, 0xFF000000 | editedColor());
-        outline(ctx, rx - 1, top + 73, rw + 2, 22, 0xFF000000);
-        ctx.drawTextWithShadow(textRenderer, "#", rx - 8, top + 105, 0xFFCCCCCC);
-
-        ctx.drawTextWithShadow(textRenderer, "Farbe im Feld ziehen,", cx, top + 172, 0xFF888888);
-        ctx.drawTextWithShadow(textRenderer, "rechts daneben den Farbton wählen.", cx, top + 184, 0xFF888888);
-    }
-
-    private static void outline(DrawContext ctx, int x, int y, int w, int h, int color) {
-        ctx.fill(x, y, x + w, y + 1, color);
-        ctx.fill(x, y + h - 1, x + w, y + h, color);
-        ctx.fill(x, y, x + 1, y + h, color);
-        ctx.fill(x + w - 1, y, x + w, y + h, color);
     }
 
     @Override
@@ -464,41 +710,5 @@ public class MenuScreen extends Screen {
     @Override
     public void removed() {
         ModConfig.save();
-    }
-
-    // ------------------------------------------------------------------ Regler
-
-    private static class DelaySlider extends SliderWidget {
-        DelaySlider(int x, int y, int w, int h) {
-            super(x, y, w, h, Text.empty(), ModConfig.get().delayTicks / 10.0);
-            updateMessage();
-        }
-
-        @Override
-        protected void updateMessage() {
-            setMessage(Text.literal("Verzögerung: " + (int) Math.round(value * 10) + " Ticks"));
-        }
-
-        @Override
-        protected void applyValue() {
-            ModConfig.get().delayTicks = (int) Math.round(value * 10);
-        }
-    }
-
-    private static class MaxPerTickSlider extends SliderWidget {
-        MaxPerTickSlider(int x, int y, int w, int h) {
-            super(x, y, w, h, Text.empty(), (Math.max(1, Math.min(4, ModConfig.get().maxPerTick)) - 1) / 3.0);
-            updateMessage();
-        }
-
-        @Override
-        protected void updateMessage() {
-            setMessage(Text.literal("Max. pro Tick (Frame-Modus): " + (1 + (int) Math.round(value * 3))));
-        }
-
-        @Override
-        protected void applyValue() {
-            ModConfig.get().maxPerTick = 1 + (int) Math.round(value * 3);
-        }
     }
 }

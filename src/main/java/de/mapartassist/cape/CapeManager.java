@@ -228,6 +228,7 @@ public final class CapeManager {
             }
         }
         registered.clear();
+        CapePreview.clear();
         loadedFor = null;
         failedFor = null;
         loadedCape = null;
@@ -237,7 +238,7 @@ public final class CapeManager {
     }
 
     /** Liest eine PNG und liefert sie im 64x32-Layout (alte 22x17-Capes, auch vergroessert, werden umgesetzt). */
-    private static BufferedImage readNormalized(Path file) throws Exception {
+    static BufferedImage readNormalized(Path file) throws Exception {
         BufferedImage bi = ImageIO.read(file.toFile());
         if (bi == null) throw new IllegalArgumentException("Kein gueltiges PNG");
         int w = bi.getWidth(), h = bi.getHeight();
