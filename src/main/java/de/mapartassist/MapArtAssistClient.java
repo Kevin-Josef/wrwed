@@ -5,6 +5,11 @@ import de.mapartassist.gui.MainScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
+import net.minecraft.util.Hand;
+import java.util.HashMap;
+import java.util.Map;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
@@ -51,6 +56,11 @@ public class MapArtAssistClient implements ClientModInitializer {
     private BlockPos queuedTarget = null;
     private Block queuedBlock = null;
 
+    // Per-frame placement (runs every rendered frame, not only every 20th of a second).
+    private long tickCounter = 0;
+    private long lastPlaceTick = -1000;
+    private final Map<BlockPos, Long> recentAttempts = new HashMap<>();
+
 
     @Override
     public void onInitializeClient() {
@@ -63,10 +73,68 @@ public class MapArtAssistClient implements ClientModInitializer {
         // our synthetic right-click would actually be used.
         ClientTickEvents.START_CLIENT_TICK.register(this::guardClick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
+        // A HUD element is drawn once per frame, after the crosshair target was updated.
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+                Identifier.of("mapartassist", "frame_placer"),
+                (ctx, tickCounter) -> onFrame(MinecraftClient.getInstance()));
+    }
+
+    /** Called every rendered frame. Places directly with the exact, freshly validated crosshair hit. */
+    private void onFrame(MinecraftClient client) {
+        ModConfig cfg = ModConfig.get();
+        if (!cfg.perFramePlacing || !cfg.autoPlace) return;
+        if (client.player == null || client.world == null || client.currentScreen != null
+                || client.interactionManager == null) return;
+        if (cooldown > 0) return; // set by inventory switching, counted down in onTick
+
+        // Interval in ticks between placements; 0 = every single frame.
+        if (cfg.delayTicks > 0 && tickCounter - lastPlaceTick < cfg.delayTicks) return;
+
+        ClientPlayerEntity player = client.player;
+        World schematic = LitematicaBridge.getSchematicWorld();
+        if (schematic == null) return;
+        if (!(client.crosshairTarget instanceof BlockHitResult hit)
+                || hit.getType() != HitResult.Type.BLOCK) return;
+        if (player.getEyePos().squaredDistanceTo(hit.getPos()) > REACH * REACH) return;
+
+        BlockPos target = hit.getBlockPos().offset(hit.getSide());
+        BlockState wanted = schematic.getBlockState(target);
+        if (wanted.isAir()) return;
+        BlockState actual = client.world.getBlockState(target);
+        if (actual.getBlock() == wanted.getBlock()) return;
+        if (!actual.isAir() && !actual.isReplaceable()) return;
+        if (player.getBoundingBox().intersects(new Box(target))) return;
+
+        // Do not hammer the same position every frame if the server keeps rejecting it.
+        Long last = recentAttempts.get(target);
+        if (last != null && tickCounter - last < 4) return;
+
+        Block wantedBlock = wanted.getBlock();
+        if (!isBlock(player.getMainHandStack(), wantedBlock)) {
+            if (!cfg.takeFromInventory) return;
+            if (!switchTo(client, wantedBlock)) {
+                if (messageCooldown <= 0) {
+                    player.sendMessage(Text.literal("Fehlt im Inventar: ")
+                            .append(wantedBlock.getName()).formatted(Formatting.YELLOW), true);
+                    messageCooldown = 40;
+                }
+                return;
+            }
+            cooldown = 2;
+            return;
+        }
+
+        // Exact held item + exact hit, verified in this very frame: nothing can go stale.
+        recentAttempts.put(target.toImmutable(), tickCounter);
+        client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
+        player.swingHand(Hand.MAIN_HAND);
+        lastPlaceTick = tickCounter;
     }
 
     private void onTick(MinecraftClient client) {
         ModConfig cfg = ModConfig.get();
+        tickCounter++;
+        if (tickCounter % 40 == 0) recentAttempts.values().removeIf(t -> tickCounter - t > 40);
         if (messageCooldown > 0) messageCooldown--;
 
         while (guiKey.wasPressed()) client.setScreen(new MainScreen(null));
@@ -81,6 +149,11 @@ public class MapArtAssistClient implements ClientModInitializer {
 
         if (!cfg.autoPlace || client.player == null || client.world == null
                 || client.currentScreen != null || client.interactionManager == null) return;
+
+        if (cfg.perFramePlacing) {
+            if (cooldown > 0) cooldown--;
+            return;
+        }
 
         if (pendingPos != null) {
             pendingTicks++;
