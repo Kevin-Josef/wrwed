@@ -1,5 +1,6 @@
 package de.mapartassist.gui;
 
+import de.mapartassist.cape.CapeCreator;
 import de.mapartassist.cape.CapeManager;
 import de.mapartassist.config.ModConfig;
 import net.minecraft.client.gui.DrawContext;
@@ -24,7 +25,8 @@ public class MenuScreen extends Screen {
     private enum Tab {
         MAPART("Map Art"),
         LOOK("Aussehen"),
-        CAPES("Capes");
+        CAPES("Capes"),
+        CREATOR("Cape-Creator");
 
         final String label;
         Tab(String label) { this.label = label; }
@@ -40,6 +42,8 @@ public class MenuScreen extends Screen {
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
     private static final int CAPE_ROWS = 5;
+    private static CapeCreator.Fit creatorFit = CapeCreator.Fit.CROP;
+    private static CapeCreator.Inner creatorInner = CapeCreator.Inner.MIRROR;
 
     private final Screen parent;
     private int left, top, cx, cw;
@@ -83,6 +87,7 @@ public class MenuScreen extends Screen {
             case MAPART -> initMapArt();
             case LOOK -> initLook();
             case CAPES -> initCapes();
+            case CREATOR -> initCreator();
         }
     }
 
@@ -225,8 +230,51 @@ public class MenuScreen extends Screen {
                 }).dimensions(cx, top + 186, cw, 20).build());
     }
 
+    private void initCreator() {
+        addDrawableChild(ButtonWidget.builder(Text.literal("Zuschnitt: " + creatorFit.label), b -> {
+            CapeCreator.Fit[] v = CapeCreator.Fit.values();
+            creatorFit = v[(creatorFit.ordinal() + 1) % v.length];
+            b.setMessage(Text.literal("Zuschnitt: " + creatorFit.label));
+        }).dimensions(cx, top + 30, cw, 20).build());
+
+        addDrawableChild(ButtonWidget.builder(Text.literal("Innenseite: " + creatorInner.label), b -> {
+            CapeCreator.Inner[] v = CapeCreator.Inner.values();
+            creatorInner = v[(creatorInner.ordinal() + 1) % v.length];
+            b.setMessage(Text.literal("Innenseite: " + creatorInner.label));
+        }).dimensions(cx, top + 56, cw, 20).build());
+
+        addDrawableChild(ButtonWidget.builder(Text.literal("Zur Bibliothek"), b -> {
+            activeTab = Tab.CAPES;
+            clearAndInit();
+        }).dimensions(cx, top + 186, cw, 20).build());
+    }
+
+    private void renderCreator(DrawContext ctx) {
+        int bx = cx, by = top + 88, bw = cw, bh = 86;
+        ctx.fill(bx, by, bx + bw, by + bh, 0x30FFFFFF);
+        outline(ctx, bx, by, bw, bh, Theme.accent());
+        String l1 = "Bild hier hineinziehen";
+        ctx.drawTextWithShadow(textRenderer, l1, bx + (bw - textRenderer.getWidth(l1)) / 2, by + 26, 0xFFFFFFFF);
+        String l2 = "(PNG oder JPG, am besten hochkant)";
+        ctx.drawTextWithShadow(textRenderer, l2, bx + (bw - textRenderer.getWidth(l2)) / 2, by + 42, 0xFF999999);
+        String status = CapeManager.status;
+        ctx.drawTextWithShadow(textRenderer, status == null || status.isEmpty()
+                ? "Das fertige Cape wird sofort ausgewählt." : status, cx, top + 212,
+                status == null || status.isEmpty() ? 0xFF888888 : 0xFFFFD866);
+        ctx.drawTextWithShadow(textRenderer, "Auflösung bleibt erhalten (kein Verkleinern).", cx, top + 226, 0xFF888888);
+    }
+
     @Override
     public void onFilesDropped(List<Path> paths) {
+        if (activeTab == Tab.CREATOR) {
+            String err = null;
+            for (Path p : paths) {
+                String e = CapeCreator.create(p, creatorFit, creatorInner);
+                if (e != null) err = e;
+            }
+            if (err != null) CapeManager.status = err;
+            return;
+        }
         if (activeTab != Tab.CAPES) return;
         String error = null;
         for (Path p : paths) {
@@ -324,6 +372,7 @@ public class MenuScreen extends Screen {
                         cx, top + 186, 0xFF888888);
             }
             case LOOK -> renderPicker(ctx);
+            case CREATOR -> renderCreator(ctx);
             case CAPES -> {
                 ctx.drawTextWithShadow(textRenderer, "Deine Capes (nur für dich sichtbar)", cx, top + 34, 0xFFCCCCCC);
                 if (CapeManager.list().isEmpty()) {

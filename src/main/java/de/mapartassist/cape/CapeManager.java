@@ -160,6 +160,20 @@ public final class CapeManager {
         }
     }
 
+    /** Speichert ein vom Cape-Creator gebautes Bild in der Bibliothek und waehlt es aus. */
+    public static void saveCreated(String rawName, BufferedImage img) throws Exception {
+        String name = sanitize(rawName);
+        if (name.isEmpty()) name = "cape";
+        Files.createDirectories(dir());
+        ImageIO.write(img, "png", dir().resolve(name + ".png").toFile());
+        ModConfig cfg = ModConfig.get();
+        cfg.selectedCape = name;
+        ModConfig.save();
+        invalidate();
+        scan();
+        status = "Cape \"" + name + "\" erstellt (" + img.getWidth() + "x" + img.getHeight() + ").";
+    }
+
     public static void delete(String name) {
         try {
             Files.deleteIfExists(dir().resolve(name + ".png"));
@@ -222,9 +236,33 @@ public final class CapeManager {
         lastResult = null;
     }
 
+    /** Liest eine PNG und liefert sie im 64x32-Layout (alte 22x17-Capes, auch vergroessert, werden umgesetzt). */
+    private static BufferedImage readNormalized(Path file) throws Exception {
+        BufferedImage bi = ImageIO.read(file.toFile());
+        if (bi == null) throw new IllegalArgumentException("Kein gueltiges PNG");
+        int w = bi.getWidth(), h = bi.getHeight();
+        boolean standard = w >= 64 && w % 64 == 0 && h * 2 == w;
+        if (!standard && w % 22 == 0 && h == 17 * (w / 22)) {
+            int k = w / 22;
+            BufferedImage out = new BufferedImage(64 * k, 32 * k, BufferedImage.TYPE_INT_ARGB);
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) out.setRGB(x, y, bi.getRGB(x, y));
+            }
+            return out;
+        }
+        return bi;
+    }
+
     private static AssetInfo.TextureAsset register(Path file, String name, String kind) throws Exception {
+        BufferedImage norm = readNormalized(file);
+        int nw = norm.getWidth(), nh = norm.getHeight();
+        if (nw < 64 || nw % 64 != 0 || nh * 2 != nw) {
+            throw new IllegalArgumentException("Falsche Groesse " + nw + "x" + nh);
+        }
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        ImageIO.write(norm, "png", bos);
         NativeImage image;
-        try (InputStream in = Files.newInputStream(file)) {
+        try (InputStream in = new java.io.ByteArrayInputStream(bos.toByteArray())) {
             image = NativeImage.read(in);
         }
         String safe = sanitize(name).toLowerCase(Locale.ROOT).replace(' ', '_')
@@ -248,17 +286,35 @@ public final class CapeManager {
         }
         try {
             AssetInfo.TextureAsset cape = register(e.cape(), name, "cape");
-            AssetInfo.TextureAsset elytra = e.hasElytra() ? register(e.elytra(), name, "elytra") : cape;
+            AssetInfo.TextureAsset elytra;
+            if (e.hasElytra()) elytra = register(e.elytra(), name, "elytra");
+            else elytra = hasElytraArea(e.cape()) ? cape : null; // null = normale Elytra
             loadedCape = cape;
             loadedElytra = elytra;
             loadedFor = name;
         } catch (Exception ex) {
             ex.printStackTrace();
             failedFor = name;
-            status = "Cape konnte nicht geladen werden.";
+            status = "Cape konnte nicht geladen werden: " + ex.getMessage();
             invalidate();
             failedFor = name;
         }
+    }
+
+    /** Prueft, ob die Cape-Datei im Elytra-Bereich (rechts neben dem Cape) ueberhaupt Pixel enthaelt. */
+    private static boolean hasElytraArea(Path file) {
+        try {
+            BufferedImage bi = readNormalized(file);
+            int k = bi.getWidth() / 64;
+            if (k < 1) return false;
+            for (int y = 0; y < 22 * k && y < bi.getHeight(); y++) {
+                for (int x = 22 * k; x < 46 * k && x < bi.getWidth(); x++) {
+                    if ((bi.getRGB(x, y) >>> 24) > 0) return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     /** Wird vom Mixin aufgerufen: liefert die Skin-Texturen mit eigenem Cape (falls gewaehlt). */
@@ -273,7 +329,8 @@ public final class CapeManager {
         }
         if (base == lastBase && lastResult != null) return lastResult;
         lastBase = base;
-        lastResult = new SkinTextures(base.body(), loadedCape, loadedElytra, base.model(), base.secure());
+        lastResult = new SkinTextures(base.body(), loadedCape,
+                loadedElytra != null ? loadedElytra : base.elytra(), base.model(), base.secure());
         return lastResult;
     }
 }
