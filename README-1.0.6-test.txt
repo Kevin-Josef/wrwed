@@ -10,3 +10,4 @@ Wichtig:
 - Beim normalen Laufen kann die automatische Platzierung pausieren und erst wieder einsetzen, wenn du langsamer wirst/anhältst.
 - Das Archiv enthält Quellcode, keine fertige JAR. In dieser Umgebung konnte ich den Minecraft/Fabric-Build nicht ausführen oder im Spiel testen.
 - Baue es mit Java 21 und Gradle/Fabric Loom passend zu den Versionen in gradle.properties.
+\n\n1.1.4 test: removed the extra deferred-aim tick. The current crosshair block and face are checked immediately before the vanilla-style input is queued. Not yet compiled or tested in-game.\n
