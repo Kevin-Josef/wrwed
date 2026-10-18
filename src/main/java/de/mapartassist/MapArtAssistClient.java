@@ -81,19 +81,19 @@ public class MapArtAssistClient implements ClientModInitializer {
             // The client predicts a successful placement before the server replies.
             // Do not treat that immediate prediction as server confirmation; give the
             // normal interaction/server round trip a few ticks to settle first.
-            if (pendingTicks >= 4 && pendingBlock != null
+            if (pendingTicks >= 1 && pendingBlock != null
                     && observed.getBlock() == pendingBlock) {
                 pendingPos = null;
                 pendingBlock = null;
                 pendingTicks = 0;
-            } else if (pendingTicks < 8) {
+            } else if (pendingTicks < 2) {
                 return;
             } else {
                 // No matching block appeared; avoid an immediate retry burst.
                 pendingPos = null;
                 pendingBlock = null;
                 pendingTicks = 0;
-                cooldown = 2;
+                cooldown = 1;
                 return;
             }
         }
@@ -166,7 +166,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         pendingPos = target.toImmutable();
         pendingBlock = wantedBlock;
         pendingTicks = 0;
-        cooldown = Math.max(2, cfg.delayTicks);
+        cooldown = Math.max(1, cfg.delayTicks);
     }
 
     private static boolean isBlock(ItemStack stack, Block block) {
