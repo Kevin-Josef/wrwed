@@ -7,6 +7,7 @@
   "authors": ["Du"],
   "license": "MIT",
   "environment": "client",
+  "mixins": ["mapartassist.mixins.json"],
   "entrypoints": {
     "client": ["de.mapartassist.MapArtAssistClient"]
   },

@@ -1,5 +1,6 @@
 package de.mapartassist.gui;
 
+import de.mapartassist.cape.CapeManager;
 import de.mapartassist.config.ModConfig;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -8,7 +9,12 @@ import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Hauptmenue der Mod: links die Reiter (Features), rechts der Inhalt.
@@ -31,6 +37,9 @@ public class MenuScreen extends Screen {
     // bleiben beim erneuten Oeffnen erhalten
     private static Tab activeTab = Tab.MAPART;
     private static boolean editAccent = true;
+    private static int capeScroll = 0;
+    private static boolean dropAsElytra = false;
+    private static final int CAPE_ROWS = 5;
 
     private final Screen parent;
     private int left, top, cx, cw;
@@ -73,7 +82,7 @@ public class MenuScreen extends Screen {
         switch (activeTab) {
             case MAPART -> initMapArt();
             case LOOK -> initLook();
-            case CAPES -> { }
+            case CAPES -> initCapes();
         }
     }
 
@@ -146,6 +155,86 @@ public class MenuScreen extends Screen {
             setEditedColor(editAccent ? ModConfig.DEFAULT_ACCENT : ModConfig.DEFAULT_BG);
             clearAndInit();
         }).dimensions(rx, top + 128, rw, 20).build());
+    }
+
+    private void initCapes() {
+        List<CapeManager.Entry> list = CapeManager.list();
+        String sel = ModConfig.get().selectedCape;
+        int maxScroll = Math.max(0, list.size() - CAPE_ROWS);
+        capeScroll = Math.max(0, Math.min(capeScroll, maxScroll));
+
+        int listW = cw - 24;
+        for (int i = 0; i < CAPE_ROWS; i++) {
+            int idx = capeScroll + i;
+            if (idx >= list.size()) break;
+            CapeManager.Entry e = list.get(idx);
+            boolean selected = e.name().equals(sel);
+            String label = (selected ? "✔ " : "") + e.name() + (e.hasElytra() ? "  (+ Elytra)" : "");
+            ButtonWidget row = ButtonWidget.builder(Text.literal(label), b -> {
+                CapeManager.select(e.name());
+                clearAndInit();
+            }).dimensions(cx, top + 48 + i * 22, listW, 20).build();
+            row.active = !selected;
+            addDrawableChild(row);
+        }
+
+        ButtonWidget up = ButtonWidget.builder(Text.literal("▲"), b -> {
+            capeScroll--;
+            clearAndInit();
+        }).dimensions(cx + listW + 4, top + 48, 20, 20).build();
+        up.active = capeScroll > 0;
+        addDrawableChild(up);
+
+        ButtonWidget down = ButtonWidget.builder(Text.literal("▼"), b -> {
+            capeScroll++;
+            clearAndInit();
+        }).dimensions(cx + listW + 4, top + 48 + (CAPE_ROWS - 1) * 22, 20, 20).build();
+        down.active = capeScroll < maxScroll;
+        addDrawableChild(down);
+
+        int bw = (cw - 8) / 3;
+        ButtonWidget none = ButtonWidget.builder(Text.literal("Keins"), b -> {
+            CapeManager.select("");
+            clearAndInit();
+        }).dimensions(cx, top + 162, bw, 20).build();
+        none.active = sel != null && !sel.isEmpty();
+        addDrawableChild(none);
+
+        ButtonWidget del = ButtonWidget.builder(Text.literal("Löschen"), b -> {
+            CapeManager.delete(sel);
+            clearAndInit();
+        }).dimensions(cx + bw + 4, top + 162, bw, 20).build();
+        del.active = sel != null && !sel.isEmpty() && CapeManager.find(sel) != null;
+        addDrawableChild(del);
+
+        addDrawableChild(ButtonWidget.builder(Text.literal("Ordner"), b -> {
+            try {
+                Files.createDirectories(CapeManager.dir());
+                Util.getOperatingSystem().open(CapeManager.dir().toUri());
+            } catch (Exception ex) {
+                CapeManager.status = "Ordner konnte nicht geöffnet werden.";
+            }
+        }).dimensions(cx + (bw + 4) * 2, top + 162, bw, 20).build());
+
+        addDrawableChild(ButtonWidget.builder(
+                Text.literal("Hineingezogene PNG ist: " + (dropAsElytra ? "ELYTRA (zum gewählten Cape)" : "CAPE")),
+                b -> {
+                    dropAsElytra = !dropAsElytra;
+                    b.setMessage(Text.literal("Hineingezogene PNG ist: "
+                            + (dropAsElytra ? "ELYTRA (zum gewählten Cape)" : "CAPE")));
+                }).dimensions(cx, top + 186, cw, 20).build());
+    }
+
+    @Override
+    public void onFilesDropped(List<Path> paths) {
+        if (activeTab != Tab.CAPES) return;
+        String error = null;
+        for (Path p : paths) {
+            String err = CapeManager.importPng(p, dropAsElytra);
+            if (err != null) error = err;
+        }
+        if (error != null) CapeManager.status = error;
+        clearAndInit();
     }
 
     private static Text onOff(String name, boolean on) {
@@ -236,8 +325,16 @@ public class MenuScreen extends Screen {
             }
             case LOOK -> renderPicker(ctx);
             case CAPES -> {
-                ctx.drawTextWithShadow(textRenderer, "Eigene Capes (mit Elytra)", cx, top + 34, 0xFFCCCCCC);
-                ctx.drawTextWithShadow(textRenderer, "Kommt bald.", cx, top + 50, 0xFF888888);
+                ctx.drawTextWithShadow(textRenderer, "Deine Capes (nur für dich sichtbar)", cx, top + 34, 0xFFCCCCCC);
+                if (CapeManager.list().isEmpty()) {
+                    ctx.drawTextWithShadow(textRenderer, "Noch keine Capes in der Bibliothek.", cx, top + 56, 0xFF888888);
+                }
+                String status = CapeManager.status;
+                ctx.drawTextWithShadow(textRenderer, status == null || status.isEmpty()
+                        ? "Cape-PNG (64x32) ins Fenster ziehen." : status, cx, top + 212,
+                        status == null || status.isEmpty() ? 0xFF888888 : 0xFFFFD866);
+                ctx.drawTextWithShadow(textRenderer, "Elytra optional. Ohne eigene nutzt sie das Cape.",
+                        cx, top + 226, 0xFF888888);
             }
         }
     }

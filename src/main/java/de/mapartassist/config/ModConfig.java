@@ -24,6 +24,8 @@ public class ModConfig {
     public boolean frameMode = false;
     /** Frame mode only: max placements per tick (1 = smoothest, higher = faster but may stutter). */
     public int maxPerTick = 2;
+    /** Name des gewaehlten Capes aus der Bibliothek, leer = keins. */
+    public String selectedCape = "";
     public int accentColor = DEFAULT_ACCENT; // RGB
     public int bgColor = DEFAULT_BG;         // RGB
 
