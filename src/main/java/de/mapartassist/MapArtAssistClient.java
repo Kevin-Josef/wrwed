@@ -44,6 +44,13 @@ public class MapArtAssistClient implements ClientModInitializer {
     private Block pendingBlock = null;
     private int pendingTicks = 0;
 
+    // Defer the synthetic click until the next tick, then require the exact same
+    // crosshair block and face. This prevents a stale click after the player looks away.
+    private BlockPos queuedHitPos = null;
+    private Direction queuedHitSide = null;
+    private BlockPos queuedTarget = null;
+    private Block queuedBlock = null;
+
 
     @Override
     public void onInitializeClient() {
@@ -71,6 +78,27 @@ public class MapArtAssistClient implements ClientModInitializer {
 
         if (!cfg.autoPlace || client.player == null || client.world == null
                 || client.currentScreen != null || client.interactionManager == null) return;
+
+        if (queuedHitPos != null) {
+            if (!(client.crosshairTarget instanceof BlockHitResult queuedHit)
+                    || queuedHit.getType() != HitResult.Type.BLOCK
+                    || !queuedHit.getBlockPos().equals(queuedHitPos)
+                    || queuedHit.getSide() != queuedHitSide
+                    || queuedBlock == null
+                    || !isBlock(client.player.getMainHandStack(), queuedBlock)) {
+                clearQueuedPlacement();
+                return;
+            }
+
+            // Only generate the click after confirming the aim and held carpet are unchanged.
+            KeyBinding.onKeyPressed(client.options.useKey.getDefaultKey());
+            pendingPos = queuedTarget.toImmutable();
+            pendingBlock = queuedBlock;
+            pendingTicks = 0;
+            clearQueuedPlacement();
+            cooldown = Math.max(1, cfg.delayTicks);
+            return;
+        }
 
         if (pendingPos != null) {
             // Count down the normal-use interval while awaiting the world update.
@@ -162,11 +190,19 @@ public class MapArtAssistClient implements ClientModInitializer {
                 || currentHit.getType() != HitResult.Type.BLOCK
                 || !currentHit.getBlockPos().equals(hit.getBlockPos())
                 || currentHit.getSide() != hit.getSide()) return;
-        KeyBinding.onKeyPressed(client.options.useKey.getDefaultKey());
-        pendingPos = target.toImmutable();
-        pendingBlock = wantedBlock;
-        pendingTicks = 0;
-        cooldown = Math.max(1, cfg.delayTicks);
+        queuedHitPos = hit.getBlockPos().toImmutable();
+        queuedHitSide = hit.getSide();
+        queuedTarget = target.toImmutable();
+        queuedBlock = wantedBlock;
+        // Validate on the next tick before creating the click.
+        cooldown = 1;
+    }
+
+    private void clearQueuedPlacement() {
+        queuedHitPos = null;
+        queuedHitSide = null;
+        queuedTarget = null;
+        queuedBlock = null;
     }
 
     private static boolean isBlock(ItemStack stack, Block block) {
