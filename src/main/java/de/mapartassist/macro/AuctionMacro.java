@@ -1,6 +1,7 @@
 package de.mapartassist.macro;
 
 import de.mapartassist.config.ModConfig;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
@@ -36,7 +37,7 @@ import java.util.regex.Pattern;
 public final class AuctionMacro {
     private AuctionMacro() {}
 
-    private enum State { IDLE, NEXT, WAIT_GUI, CLOSING, SELECT, SELL, DELAY }
+    private enum State { IDLE, NEXT, WAIT_GUI, CLOSING, SELECT, SELL, CONFIRM, DELAY }
 
     private record Job(Item item, int amount, long manual) {}
     private record Listing(long price, int count) {
@@ -56,7 +57,32 @@ public final class AuctionMacro {
     private static int countBeforeSell = 0;
     private static boolean filterToggleTried = false;
 
+    private static int failedSells = 0;
+    private static int watchChat = 0;
+    private static String lastServerMsg = "";
+    private static boolean chatHooked = false;
+
     public static String status = "";
+
+    /** Muss einmal beim Start aufgerufen werden: merkt sich Server-Antworten nach /ah sell. */
+    public static void init() {
+        if (chatHooked) return;
+        chatHooked = true;
+        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            if (overlay || watchChat <= 0) return;
+            String t = message.getString();
+            if (t.isBlank()) return;
+            lastServerMsg = t;
+            ClientPlayerEntity pl = MinecraftClient.getInstance().player;
+            if (pl != null) pl.sendMessage(Text.literal("[Makro] Server: " + t).formatted(Formatting.GOLD), false);
+        });
+    }
+
+    /** Manueller Preis nur, wenn fuer das Item eingeschaltet UND ein Betrag gesetzt ist. */
+    public static boolean useManual(ModConfig cfg, String id) {
+        long price = cfg.sellPrices.getOrDefault(id, 0L);
+        return price > 0 && cfg.sellUseManual.getOrDefault(id, true);
+    }
 
     public static boolean running() { return state != State.IDLE; }
 
@@ -70,6 +96,8 @@ public final class AuctionMacro {
 
         ModConfig cfg = ModConfig.get();
         queue.clear();
+        failedSells = 0;
+        init();
         for (String id : cfg.sellItems) {
             Item it;
             try {
@@ -77,7 +105,7 @@ public final class AuctionMacro {
             } catch (Exception e) {
                 continue;
             }
-            if (hasFullStack(p, it)) queue.add(new Job(it, it.getMaxCount(), cfg.sellPrices.getOrDefault(id, 0L)));
+            if (hasFullStack(p, it)) queue.add(new Job(it, it.getMaxCount(), useManual(cfg, id) ? cfg.sellPrices.getOrDefault(id, 0L) : 0L));
         }
         if (queue.isEmpty()) {
             say("Nichts zu verkaufen: Keins der Items aus der Liste ist im Inventar.", Formatting.YELLOW);
@@ -219,19 +247,59 @@ public final class AuctionMacro {
                 } else {
                     countBeforeSell = count(p, cur.item());
                     sentSell = true;
+                    lastServerMsg = "";
+                    watchChat = 100;
                     p.networkHandler.sendChatCommand(cmd);
                     say("Gesendet: /" + cmd + "   " + info, Formatting.GREEN);
+                    state = State.CONFIRM;
+                    timer = 0;
+                    return;
                 }
                 state = State.DELAY;
                 timer = 0;
             }
+            case CONFIRM -> {
+                // Manche Auktions-Plugins oeffnen nach /ah sell ein Bestaetigungsmenue.
+                if (auctionOpen(client, p)) {
+                    if (timer < 4) return; // Inhalt vom Server laden lassen
+                    Slot ok = findConfirmSlot(p);
+                    dumpScreen(client);
+                    if (ok == null) {
+                        p.closeHandledScreen();
+                        finish("Nach /ah sell öffnete sich ein Menü, aber ich fand keinen Bestätigen-Knopf. "
+                                + "Inhalt steht in config/mapartassist/ah-dump.txt.", Formatting.RED);
+                        return;
+                    }
+                    say("Bestätige Verkauf (Slot " + ok.id + ").", Formatting.GREEN);
+                    client.interactionManager.clickSlot(p.currentScreenHandler.syncId, ok.id, 0, SlotActionType.PICKUP, p);
+                    state = State.DELAY;
+                    timer = 0;
+                } else if (timer >= 20) {
+                    state = State.DELAY; // kein Menue: Befehl wirkt direkt
+                    timer = 0;
+                }
+            }
             case DELAY -> {
+                if (client.currentScreen instanceof HandledScreen<?> && p.currentScreenHandler != p.playerScreenHandler && timer >= 10) {
+                    p.closeHandledScreen();
+                }
                 if (timer >= 25) {
                     // Wiederholen: Wurde etwas eingestellt und ist noch Ware da, dasselbe Item nochmal
                     // (Preis wird dabei in der Auktion neu gelesen).
                     if (sentSell && cur != null) {
                         sentSell = false;
                         int now = count(p, cur.item());
+                        if (now >= countBeforeSell) {
+                            failedSells++;
+                            if (failedSells >= 2) {
+                                finish("Verkauf funktioniert nicht: Item ist nach /ah sell noch da (2 Versuche). "
+                                        + (lastServerMsg.isEmpty() ? "Der Server hat nichts geantwortet."
+                                        : "Server sagte: " + lastServerMsg), Formatting.RED);
+                                return;
+                            }
+                        } else {
+                            failedSells = 0;
+                        }
                         if (cfg.macroRepeat && hasFullStack(p, cur.item())) {
                             // Die Inventarmenge ist kein sicherer Beleg dafuer, dass der Server
                             // den Verkaufsbefehl abgelehnt hat. Bei aktivierter Wiederholung das
@@ -399,6 +467,25 @@ public final class AuctionMacro {
         boolean edge = down && !f8Down;
         f8Down = down;
         if (!edge || client.player == null) return;
+        dumpScreen(client);
+    }
+
+    private static Slot findConfirmSlot(ClientPlayerEntity p) {
+        String[] words = {"confirm", "bestätig", "bestaetig", "accept", "akzept", "bestätigen", "yes", "ja", "einstellen", "list"};
+        Slot green = null;
+        for (Slot slot : p.currentScreenHandler.slots) {
+            if (slot.inventory instanceof PlayerInventory) continue;
+            ItemStack st = slot.getStack();
+            if (st.isEmpty()) continue;
+            String n = st.getName().getString().toLowerCase();
+            for (String w : words) if (n.contains(w)) return slot;
+            String id = Registries.ITEM.getId(st.getItem()).getPath();
+            if (green == null && (id.startsWith("lime_") || id.startsWith("green_") || id.equals("emerald_block"))) green = slot;
+        }
+        return green;
+    }
+
+    private static void dumpScreen(MinecraftClient client) {
         if (!(client.currentScreen instanceof HandledScreen<?> hs)) return;
 
         List<String> lines = new ArrayList<>();

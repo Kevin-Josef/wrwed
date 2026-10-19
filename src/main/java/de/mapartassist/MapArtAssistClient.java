@@ -72,6 +72,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ModConfig.load();
+        AuctionMacro.init();
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY));
         combatKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -105,7 +106,7 @@ public class MapArtAssistClient implements ClientModInitializer {
                                                         return 0;
                                                     }
                                                     if (val.equalsIgnoreCase("auto")) {
-                                                        cfg.sellPrices.remove(id);
+                                                        cfg.sellUseManual.put(id, false);
                                                         ModConfig.save();
                                                         AuctionMacro.message("Preis für " + id + ": automatisch.", Formatting.GREEN);
                                                         return 1;
@@ -116,6 +117,7 @@ public class MapArtAssistClient implements ClientModInitializer {
                                                         return 0;
                                                     }
                                                     cfg.sellPrices.put(id, v);
+                                                    cfg.sellUseManual.put(id, true);
                                                     ModConfig.save();
                                                     AuctionMacro.message("Manueller Preis für " + id + ": " + v, Formatting.GREEN);
                                                     return 1;

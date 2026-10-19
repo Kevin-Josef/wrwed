@@ -38,6 +38,8 @@ public class ModConfig {
     public Map<String, Integer> sellAmounts = new HashMap<>();
     /** Pro Item: manueller Verkaufspreis (fuer die eingestellte Menge). Fehlt/0 = automatisch aus der Auktion. */
     public Map<String, Long> sellPrices = new HashMap<>();
+    /** Pro Item: true = manuellen Preis nutzen, false = guenstigsten Auktionspreis suchen. Fehlt = manuell, falls Preis gesetzt. */
+    public Map<String, Boolean> sellUseManual = new HashMap<>();
     /** Makro: nach jedem Verkauf Preis neu pruefen und erneut einstellen, bis das Item aus dem Inventar leer ist. */
     public boolean macroRepeat = true;
     /** HT1 Combat Lock: bei Schaden sofort den Server verlassen. */
@@ -73,6 +75,7 @@ public class ModConfig {
                 // Dieses Makro soll echte Verkaufsbefehle senden; Testlauf nicht
                 // durch einen alten gespeicherten true-Wert stillschweigend aktiv lassen.
                 loaded.macroDryRun = false;
+                if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
                 INSTANCE = loaded;
                 save();
             }

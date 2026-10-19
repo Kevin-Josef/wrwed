@@ -319,8 +319,14 @@ public class MenuScreen extends Screen {
             Item it = item();
             if (it != null) {
                 ctx.drawItem(new ItemStack(it), x + 6, y + 5);
-                long mp = ModConfig.get().sellPrices.getOrDefault(id, 0L);
+                ModConfig c = ModConfig.get();
+                long mp = c.sellPrices.getOrDefault(id, 0L);
+                boolean man = AuctionMacro.useManual(c, id);
                 text(ctx, it.getName().getString() + (mp > 0 ? "  §7(" + mp + ")" : ""), x + 30, y + 9, 0xFFFFFFFF);
+                int cx0 = x + w - 88;
+                boolean overChip = mx >= cx0 && mx < cx0 + 58 && my >= y + 4 && my < y + h - 4;
+                ctx.fill(cx0, y + 4, cx0 + 58, y + h - 4, man ? alpha(0xE0A030, overChip ? 0.9f : 0.7f) : alpha(Theme.accent(), overChip ? 0.9f : 0.7f));
+                textCentered(ctx, man ? "Manuell" : "Auto", cx0 + 29, y + 9, 0xFFFFFFFF);
             } else {
                 text(ctx, id, x + 30, y + 9, 0xFFAA6666);
             }
@@ -331,6 +337,19 @@ public class MenuScreen extends Screen {
 
         @Override
         void press(int mx, int my) {
+            if (mx >= x + w - 88 && mx < x + w - 30) {
+                ModConfig c = ModConfig.get();
+                long mp = c.sellPrices.getOrDefault(id, 0L);
+                boolean man = AuctionMacro.useManual(c, id);
+                if (!man && mp <= 0) {
+                    macroStatus = "Erst Preis setzen: /ahmacro preis " + id.replace("minecraft:", "") + " 200k";
+                    return;
+                }
+                c.sellUseManual.put(id, !man);
+                ModConfig.save();
+                macroStatus = !man ? "Manueller Preis: " + mp : "Automatisch: günstigster Auktionspreis.";
+                return;
+            }
             if (mx >= x + w - 24) {
                 ModConfig.get().sellItems.remove(id);
                 ModConfig.get().sellAmounts.remove(id);
@@ -854,8 +873,8 @@ public class MenuScreen extends Screen {
         }
         int rx = cx + LIST_W + 26;
         text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 140, 0xFFCCCCCC);
-        text(ctx, "Fester Preis: /ahmacro preis tnt 200k", rx, cy + 154, 0xFF777783);
-        text(ctx, "(zurück: ... tnt auto). F8 = Diagnose.", rx, cy + 166, 0xFF777783);
+        text(ctx, "Manuellen Preis setzen: /ahmacro preis tnt 200k", rx, cy + 154, 0xFF777783);
+        text(ctx, "Chip "Auto/Manuell" in der Zeile schaltet um. F8 = Diagnose.", rx, cy + 166, 0xFF777783);
         if (cfg.macroDryRun) {
             text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 178,
                     alpha(0xFF5555, 0.7f + 0.3f * (float) Math.sin(time() * 4)));
