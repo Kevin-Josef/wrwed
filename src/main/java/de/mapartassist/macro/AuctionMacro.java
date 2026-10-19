@@ -77,7 +77,7 @@ public final class AuctionMacro {
             } catch (Exception e) {
                 continue;
             }
-            if (count(p, it) > 0) queue.add(new Job(it, cfg.sellAmounts.getOrDefault(id, 0), cfg.sellPrices.getOrDefault(id, 0L)));
+            if (hasFullStack(p, it)) queue.add(new Job(it, it.getMaxCount(), cfg.sellPrices.getOrDefault(id, 0L)));
         }
         if (queue.isEmpty()) {
             say("Nichts zu verkaufen: Keins der Items aus der Liste ist im Inventar.", Formatting.YELLOW);
@@ -129,7 +129,12 @@ public final class AuctionMacro {
             case NEXT -> {
                 cur = queue.poll();
                 if (cur == null) { finish("Makro fertig.", Formatting.GREEN); return; }
-                if (count(p, cur.item()) == 0) return; // naechstes Item im naechsten Tick
+                if (!hasFullStack(p, cur.item())) {
+                    say("Kein voller Stack " + cur.item().getName().getString()
+                            + " im Inventar; überspringe.", Formatting.YELLOW);
+                    state = State.NEXT;
+                    return;
+                } // Nur volle Inventar-Stacks verkaufen
                 best = null;
                 filterToggleTried = false;
                 if (cur.manual() > 0) { // manueller Preis: keine Auktionssuche
@@ -151,14 +156,6 @@ public final class AuctionMacro {
                         best = l;
                         p.closeHandledScreen();
                         state = State.CLOSING;
-                        timer = 0;
-                    } else if (l == null && timer >= 14 && !filterToggleTried) {
-                        // Keine blinde Klick-Aktion auf einen angenommenen GUI-Slot:
-                        // das kann je nach Menülayout den falschen Filter/Zustand ändern.
-                        // Im Filter "Alle" sind sowohl Einzelangebote als auch volle Stacks sichtbar;
-                        // für die Preisermittlung werden anschließend nur exakte Mengen akzeptiert.
-                        filterToggleTried = true;
-                        say("Noch kein Angebot mit exakt " + targetAmount(p, cur) + " Stück sichtbar; prüfe die aktuelle Auktionsseite weiter.", Formatting.GRAY);
                         timer = 0;
                     } else if (timer > 70) {
                         p.closeHandledScreen();
@@ -189,14 +186,14 @@ public final class AuctionMacro {
             }
             case SELL -> {
                 if (timer < 3) return; // Inventar-Wechsel setzen lassen
-                int have = cfg.macroDryRun ? firstStackCount(p, cur.item()) : handCount(p, cur.item());
-                if (have <= 0) {
-                    finish("Item nicht in der Hand. Abgebrochen.", Formatting.RED);
+                int stackLimit = cur.item().getMaxCount();
+                int have = cfg.macroDryRun ? firstFullStackCount(p, cur.item()) : handCount(p, cur.item());
+                if (have < stackLimit) {
+                    finish("Kein voller Stack " + cur.item().getName().getString()
+                            + " in der Hand. Es wird nichts verkauft.", Formatting.YELLOW);
                     return;
                 }
-                int stackLimit = cur.item().getMaxCount();
-                int requested = cur.amount() > 0 ? cur.amount() : stackLimit;
-                int amount = Math.min(Math.min(requested, stackLimit), have);
+                int amount = stackLimit;
                 if (cur.manual() <= 0 && best == null) {
                     finish("Kein gültiger Auktionspreis vorhanden. Abgebrochen.", Formatting.RED);
                     return;
@@ -235,7 +232,7 @@ public final class AuctionMacro {
                     if (sentSell && cur != null) {
                         sentSell = false;
                         int now = count(p, cur.item());
-                        if (cfg.macroRepeat && now > 0) {
+                        if (cfg.macroRepeat && hasFullStack(p, cur.item())) {
                             // Die Inventarmenge ist kein sicherer Beleg dafuer, dass der Server
                             // den Verkaufsbefehl abgelehnt hat. Bei aktivierter Wiederholung das
                             // Item erneut einreihen; NEXT liest den Auktionspreis erneut und SELL
@@ -264,8 +261,8 @@ public final class AuctionMacro {
     }
 
     /**
-     * Günstigstes Angebot für exakt die gewünschte Menge.
-     * Angebote mit einer anderen Stackgröße werden bewusst nicht umgerechnet.
+     * Günstigstes Angebot für einen vollständigen Stack des Items.
+     * Angebote mit einer anderen Stackgröße werden nicht verwendet.
      */
     private static Listing scan(ClientPlayerEntity p, Item item, int targetAmount) {
         Listing bestL = null;
@@ -282,11 +279,9 @@ public final class AuctionMacro {
         return bestL;
     }
 
-    /** Zielmenge: Menü-Einstellung, begrenzt durch Stacklimit und ersten verfügbaren Inventarstack. */
+    /** Zielmenge ist immer ein vollständiger Stack; Teilstacks werden ignoriert. */
     private static int targetAmount(ClientPlayerEntity p, Job job) {
-        int requested = job.amount() > 0 ? job.amount() : job.item().getMaxCount();
-        int available = firstStackCount(p, job.item());
-        return Math.max(0, Math.min(Math.min(requested, job.item().getMaxCount()), available));
+        return hasFullStack(p, job.item()) ? job.item().getMaxCount() : 0;
     }
 
     private static List<String> loreLines(ItemStack st) {
@@ -353,6 +348,19 @@ public final class AuctionMacro {
         return 0;
     }
 
+    /** True only when one inventory slot contains a complete stack. */
+    private static boolean hasFullStack(ClientPlayerEntity p, Item item) {
+        return firstFullStackCount(p, item) >= item.getMaxCount();
+    }
+
+    private static int firstFullStackCount(ClientPlayerEntity p, Item item) {
+        for (int i = 0; i < 36; i++) {
+            ItemStack st = p.getInventory().getStack(i);
+            if (st.getItem() == item && st.getCount() >= item.getMaxCount()) return st.getCount();
+        }
+        return 0;
+    }
+
     private static int handCount(ClientPlayerEntity p, Item item) {
         ItemStack st = p.getMainHandStack();
         return st.getItem() == item ? st.getCount() : 0;
@@ -360,14 +368,17 @@ public final class AuctionMacro {
 
     /** Hotbar zuerst, sonst aus dem Inventar in die Hotbar tauschen. */
     private static boolean selectItem(MinecraftClient client, ClientPlayerEntity p, Item item) {
+        int required = item.getMaxCount();
         for (int i = 0; i < 9; i++) {
-            if (p.getInventory().getStack(i).getItem() == item) {
+            ItemStack st = p.getInventory().getStack(i);
+            if (st.getItem() == item && st.getCount() >= required) {
                 p.getInventory().setSelectedSlot(i);
                 return true;
             }
         }
         for (int s = 9; s < 36; s++) {
-            if (p.getInventory().getStack(s).getItem() != item) continue;
+            ItemStack source = p.getInventory().getStack(s);
+            if (source.getItem() != item || source.getCount() < required) continue;
             int target = -1;
             for (int i = 0; i < 9; i++) {
                 if (p.getInventory().getStack(i).isEmpty()) { target = i; break; }
