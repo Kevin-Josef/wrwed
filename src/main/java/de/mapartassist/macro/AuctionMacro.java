@@ -183,7 +183,7 @@ public final class AuctionMacro {
                     return;
                 }
                 int amount = cur.amount() > 0 ? Math.min(cur.amount(), have) : have;
-                long price = cur.manual() > 0 ? cur.manual() : (amount == best.count() ? best.price() : Math.round(best.unit() * amount));
+                long price = cur.manual() > 0 ? cur.manual() : Math.round(best.unit() * amount);
                 if (price < 1) {
                     finish("Berechneter Preis ist 0. Abgebrochen.", Formatting.RED);
                     return;
@@ -211,9 +211,15 @@ public final class AuctionMacro {
                         sentSell = false;
                         int now = count(p, cur.item());
                         if (cfg.macroRepeat && now > 0) {
-                            if (now < countBeforeSell) queue.addFirst(cur);
-                            else say("Es wurde nichts eingestellt (Menge unverändert), überspringe "
-                                    + cur.item().getName().getString() + ".", Formatting.YELLOW);
+                            // Die Inventarmenge ist kein sicherer Beleg dafuer, dass der Server
+                            // den Verkaufsbefehl abgelehnt hat. Bei aktivierter Wiederholung das
+                            // Item erneut einreihen; NEXT liest den Auktionspreis erneut und SELL
+                            // sendet einen frischen /ah sell-Befehl.
+                            if (now >= countBeforeSell) {
+                                say("Inventarmenge unverändert; erneuter Versuch mit Preisprüfung für "
+                                        + cur.item().getName().getString() + ".", Formatting.YELLOW);
+                            }
+                            queue.addFirst(cur);
                         }
                     }
                     state = State.NEXT;

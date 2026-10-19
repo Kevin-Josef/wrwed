@@ -47,7 +47,7 @@ public class ModConfig {
     /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */
     public int combatLockDelaySec = 0;
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
-    public boolean macroDryRun = false;
+    public boolean macroDryRun = true;
     public int accentColor = DEFAULT_ACCENT; // RGB
     public int bgColor = DEFAULT_BG;         // RGB
 
