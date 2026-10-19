@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
  * Auktions-Makro fuer HugoSMP:
  *  1. /ah &lt;item&gt; sucht, 2. guenstigstes Angebot fuer exakt die Zielmenge lesen,
  *  3. Item in die Hand, 4. /ah sell &lt;gesamtpreis&gt; &lt;menge&gt; senden.
- * Standardmaessig im Testlauf (sendet nichts).
+ * Verkauft ausschließlich vollständige Stacks.
  */
 public final class AuctionMacro {
     private AuctionMacro() {}

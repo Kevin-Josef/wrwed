@@ -72,8 +72,6 @@ public class MenuScreen extends Screen {
     private float tabIndX = -1, tabIndW = TAB_W;
     private float tabChangeAt = -10f;
     private String hoverCape = null;
-    private String editingAmountId = null;
-    private String amountInput = "";
 
     // Farbwaehler
     private float hue, sat, val;
@@ -329,16 +327,6 @@ public class MenuScreen extends Screen {
             boolean overX = mx >= x + w - 24 && mx < x + w && my >= y && my < y + h;
             text(ctx, "✕", x + w - 16, y + 9, overX ? 0xFFFF6666 : 0xFF888890);
 
-            int ax = x + w - 80, aw = 52;
-            boolean overA = mx >= ax && mx < ax + aw && my >= y && my < y + h;
-            ctx.fill(ax, y + 4, ax + aw, y + h - 4, overA ? alpha(Theme.accent(), 0.45f) : 0xFF33333F);
-            textCentered(ctx, amountLabel(), ax + aw / 2, y + 9, 0xFFFFFFFF);
-        }
-
-        private String amountLabel() {
-            if (id.equals(editingAmountId)) return "[" + (amountInput.isEmpty() ? "_" : amountInput) + "]";
-            int a = ModConfig.get().sellAmounts.getOrDefault(id, 0);
-            return a == 0 ? "Stack" : a + "x";
         }
 
         @Override
@@ -348,10 +336,6 @@ public class MenuScreen extends Screen {
                 ModConfig.get().sellAmounts.remove(id);
                 ModConfig.save();
                 clearAndInit();
-            } else if (mx >= x + w - 80 && mx < x + w - 28) {
-                editingAmountId = id;
-                int cur = ModConfig.get().sellAmounts.getOrDefault(id, 64);
-                amountInput = cur > 0 ? Integer.toString(cur) : "64";
             }
         }
     }
@@ -733,41 +717,11 @@ public class MenuScreen extends Screen {
 
     @Override
     public boolean charTyped(CharInput input) {
-        if (editingAmountId != null) {
-            int codePoint = input.codepoint();
-            if (codePoint >= '0' && codePoint <= '9' && amountInput.length() < 3) {
-                amountInput += (char) codePoint;
-            }
-            return true;
-        }
         return super.charTyped(input);
     }
 
     @Override
     public boolean keyPressed(KeyInput input) {
-        int keyCode = input.key();
-        if (editingAmountId != null) {
-            if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-                if (!amountInput.isEmpty()) amountInput = amountInput.substring(0, amountInput.length() - 1);
-                return true;
-            }
-            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-                int amount = 64;
-                try { amount = Integer.parseInt(amountInput); } catch (NumberFormatException ignored) { }
-                amount = Math.max(1, Math.min(64, amount));
-                ModConfig.get().sellAmounts.put(editingAmountId, amount);
-                ModConfig.save();
-                editingAmountId = null;
-                amountInput = "";
-                return true;
-            }
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                editingAmountId = null;
-                amountInput = "";
-                return true;
-            }
-            return true;
-        }
         return super.keyPressed(input);
     }
 
