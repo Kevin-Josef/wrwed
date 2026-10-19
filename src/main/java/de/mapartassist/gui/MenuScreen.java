@@ -7,6 +7,8 @@ import de.mapartassist.cape.CapePreview;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.input.CharInput;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
@@ -730,18 +732,20 @@ public class MenuScreen extends Screen {
     }
 
     @Override
-    public boolean charTyped(char chr, int modifiers) {
+    public boolean charTyped(CharInput input) {
         if (editingAmountId != null) {
-            if (chr >= '0' && chr <= '9' && amountInput.length() < 3) {
-                amountInput += chr;
+            int codePoint = input.codepoint();
+            if (codePoint >= '0' && codePoint <= '9' && amountInput.length() < 3) {
+                amountInput += (char) codePoint;
             }
             return true;
         }
-        return super.charTyped(chr, modifiers);
+        return super.charTyped(input);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyInput input) {
+        int keyCode = input.key();
         if (editingAmountId != null) {
             if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
                 if (!amountInput.isEmpty()) amountInput = amountInput.substring(0, amountInput.length() - 1);
@@ -764,7 +768,7 @@ public class MenuScreen extends Screen {
             }
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(input);
     }
 
     @Override
