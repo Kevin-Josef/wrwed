@@ -54,6 +54,7 @@ public final class AuctionMacro {
     private static boolean f8Down = false;
     private static boolean sentSell = false;
     private static int countBeforeSell = 0;
+    private static boolean filterToggleTried = false;
 
     public static String status = "";
 
@@ -130,6 +131,7 @@ public final class AuctionMacro {
                 if (cur == null) { finish("Makro fertig.", Formatting.GREEN); return; }
                 if (count(p, cur.item()) == 0) return; // naechstes Item im naechsten Tick
                 best = null;
+                filterToggleTried = false;
                 if (cur.manual() > 0) { // manueller Preis: keine Auktionssuche
                     state = State.SELECT;
                     timer = 0;
@@ -145,11 +147,27 @@ public final class AuctionMacro {
                 if (auctionOpen(client, p)) {
                     int targetAmount = targetAmount(p, cur);
                     Listing l = scan(p, cur.item(), targetAmount);
-                    if (l != null && timer >= 6) {
+                    if (l != null && timer >= 8) {
                         best = l;
                         p.closeHandledScreen();
                         state = State.CLOSING;
                         timer = 0;
+                    } else if (l == null && timer >= 14 && !filterToggleTried) {
+                        // HugoSMP kann mit dem Stack-Filter "Alle" Angebote anzeigen,
+                        // die der exakten Mengen-Suche nicht entsprechen. Der Filter-Button
+                        // liegt im Steuerungsstreifen unter den Angebots-Slots; Rechtsklick
+                        // wechselt den Stack-Filter (Alle -> Nur ganze Stacks -> Nur einzelne Items).
+                        // Einmal pro Suche umschalten und danach erneut scannen.
+                        int filterSlot = 40;
+                        if (p.currentScreenHandler.slots.size() > filterSlot) {
+                            client.interactionManager.clickSlot(p.currentScreenHandler.syncId,
+                                    filterSlot, 1, SlotActionType.PICKUP, p);
+                            filterToggleTried = true;
+                            timer = 0;
+                            say("Kein passendes Angebot im aktuellen Filter; wechsle Stack-Filter und prüfe erneut.", Formatting.GRAY);
+                        } else {
+                            filterToggleTried = true;
+                        }
                     } else if (timer > 70) {
                         p.closeHandledScreen();
                         say("Kein Angebot für " + targetAmount(p, cur) + "x "
