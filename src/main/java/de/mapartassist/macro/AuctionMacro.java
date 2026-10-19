@@ -142,6 +142,34 @@ public final class AuctionMacro {
     // ------------------------------------------------------------------ Tick
 
     public static void tick(MinecraftClient client) {
+        try {
+            tickInner(client);
+        } catch (Throwable t) {
+            // Nie das Spiel crashen lassen: Makro stoppen, Fehler anzeigen und speichern.
+            String where = t.getStackTrace().length > 0 ? t.getStackTrace()[0].toString() : "?";
+            try {
+                java.io.StringWriter sw = new java.io.StringWriter();
+                t.printStackTrace(new java.io.PrintWriter(sw));
+                Path f = FabricLoader.getInstance().getConfigDir().resolve("mapartassist").resolve("macro-error.txt");
+                Files.createDirectories(f.getParent());
+                Files.writeString(f, "Status beim Fehler: " + state + "\n" + sw);
+            } catch (Exception ignored) { }
+            String st = String.valueOf(state);
+            state = State.IDLE;
+            queue.clear();
+            cur = null;
+            best = null;
+            sentSell = false;
+            status = "FEHLER bei " + st + ": " + t;
+            ClientPlayerEntity pl = MinecraftClient.getInstance().player;
+            if (pl != null) {
+                pl.sendMessage(Text.literal("[Makro] FEHLER im Schritt " + st + ": " + t).formatted(Formatting.RED), false);
+                pl.sendMessage(Text.literal("[Makro] Stelle: " + where + " (Details: config/mapartassist/macro-error.txt)").formatted(Formatting.RED), false);
+            }
+        }
+    }
+
+    private static void tickInner(MinecraftClient client) {
         pollDump(client);
         if (state == State.IDLE) return;
 
