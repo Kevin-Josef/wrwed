@@ -82,6 +82,9 @@ public final class AuctionMacro {
             say("Nichts zu verkaufen: Keins der Items aus der Liste ist im Inventar.", Formatting.YELLOW);
             return;
         }
+        if (cfg.macroDryRun) {
+            say("TESTLAUF IST AN: Es wird NICHTS eingestellt. Im Menü (Makros) den Testlauf ausschalten.", Formatting.RED);
+        }
         say((cfg.macroDryRun ? "[Testlauf] " : "") + "Makro startet mit " + queue.size() + " Item(s).", Formatting.GREEN);
         state = State.NEXT;
         timer = 0;
@@ -190,7 +193,7 @@ public final class AuctionMacro {
                         + (cur.manual() > 0 ? " (manueller Preis)"
                         : " (günstigstes Angebot: " + best.price() + " für " + best.count() + ")");
                 if (cfg.macroDryRun) {
-                    say("[Testlauf] würde senden: /" + cmd + "   " + info, Formatting.AQUA);
+                    say("[TESTLAUF, nicht gesendet] /" + cmd + "   " + info, Formatting.AQUA);
                 } else {
                     countBeforeSell = count(p, cur.item());
                     sentSell = true;

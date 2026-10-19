@@ -44,6 +44,8 @@ public class ModConfig {
     public boolean combatLock = false;
     /** Nur ausloesen, wenn ein anderer Spieler in der Naehe ist (ignoriert Fall-/Feuer-/Hungerschaden). */
     public boolean combatLockNeedsPlayer = true;
+    /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */
+    public int combatLockDelaySec = 0;
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
     public boolean macroDryRun = true;
     public int accentColor = DEFAULT_ACCENT; // RGB

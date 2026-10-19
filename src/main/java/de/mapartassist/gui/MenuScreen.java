@@ -528,6 +528,8 @@ public class MenuScreen extends Screen {
                 () -> cfg.combatLock, v -> { cfg.combatLock = v; ModConfig.save(); }));
         controls.add(new Tog(cx + 6, cy + 54, COL - 12, "Nur bei Spieler in der Nähe",
                 () -> cfg.combatLockNeedsPlayer, v -> { cfg.combatLockNeedsPlayer = v; ModConfig.save(); }));
+        controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Verzögerung", " s", 0, 19,
+                () -> Math.max(0, Math.min(19, cfg.combatLockDelaySec)), v -> cfg.combatLockDelaySec = v));
     }
 
     private static final int MACRO_ROWS = 5;
@@ -569,7 +571,7 @@ public class MenuScreen extends Screen {
         int rbx = cx + LIST_W + 16, rbw = cx + cw - rbx - 6;
         controls.add(new Tog(rbx, cy + 82, rbw, "Wiederholen, bis leer",
                 () -> cfg.macroRepeat, v -> cfg.macroRepeat = v));
-        controls.add(new Btn(rbx, cy + 112, (rbw - 4) / 2, 20, () -> "Jetzt starten", () -> {
+        controls.add(new Btn(rbx, cy + 112, (rbw - 4) / 2, 20, () -> cfg.macroDryRun ? "Starten (Test)" : "Jetzt starten", () -> {
             close();
             AuctionMacro.start();
         }).enabledIf(() -> !AuctionMacro.running() && !ModConfig.get().sellItems.isEmpty()));
@@ -832,12 +834,17 @@ public class MenuScreen extends Screen {
 
     private void renderHt1(DrawContext ctx) {
         ModConfig cfg = ModConfig.get();
-        text(ctx, cfg.combatLock ? "Status: AN" : "Status: AUS", cx + 12, cy + 90,
+        text(ctx, cfg.combatLock ? "Status: AN" : "Status: AUS", cx + 12, cy + 122,
                 cfg.combatLock ? 0xFF66DD77 : 0xFFDD6666);
-        if (!CombatLock.lastTrigger.isEmpty()) text(ctx, CombatLock.lastTrigger, cx + 12, cy + 106, 0xFFFFD866);
+        long rem = CombatLock.remainingMs();
+        if (rem >= 0) {
+            text(ctx, "Verlasse Server in " + (int) Math.ceil(rem / 1000.0) + " s", cx + 12, cy + 136, 0xFFFF6666);
+        } else if (!CombatLock.lastTrigger.isEmpty()) {
+            text(ctx, CombatLock.lastTrigger, cx + 12, cy + 136, 0xFFFFD866);
+        }
         int rx = cx + COL2 + 12;
         text(ctx, "Sobald du Schaden nimmst, trennt die", rx, cy + 28, 0xFFCCCCCC);
-        text(ctx, "Mod sofort die Verbindung zum Server.", rx, cy + 41, 0xFFCCCCCC);
+        text(ctx, "Mod die Verbindung (0 s = sofort).", rx, cy + 41, 0xFFCCCCCC);
         text(ctx, "Geprüft wird jeden Frame, die Reaktion", rx, cy + 62, 0xFF777783);
         text(ctx, "kommt direkt nach dem Treffer-Paket.", rx, cy + 75, 0xFF777783);
         text(ctx, "Der Server hat den Treffer da schon", rx, cy + 96, 0xFF777783);
@@ -855,6 +862,10 @@ public class MenuScreen extends Screen {
         text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 140, 0xFFCCCCCC);
         text(ctx, "Fester Preis: /ahmacro preis tnt 200k", rx, cy + 154, 0xFF777783);
         text(ctx, "(zurück: ... tnt auto). F8 = Diagnose.", rx, cy + 166, 0xFF777783);
+        if (cfg.macroDryRun) {
+            text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 178,
+                    alpha(0xFF5555, 0.7f + 0.3f * (float) Math.sin(time() * 4)));
+        }
         String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
         text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
     }
