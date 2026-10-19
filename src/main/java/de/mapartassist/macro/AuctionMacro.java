@@ -61,6 +61,7 @@ public final class AuctionMacro {
     private static int watchChat = 0;
     private static String lastServerMsg = "";
     private static boolean chatHooked = false;
+    private static boolean inChatHook = false;
 
     public static String status = "";
 
@@ -69,12 +70,18 @@ public final class AuctionMacro {
         if (chatHooked) return;
         chatHooked = true;
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (overlay || watchChat <= 0) return;
+            if (overlay || watchChat <= 0 || inChatHook) return;
             String t = message.getString();
-            if (t.isBlank()) return;
+            // Eigene Makro-Meldungen nie erneut verarbeiten (sonst Endlosschleife).
+            if (t.isBlank() || t.startsWith("[Makro]")) return;
             lastServerMsg = t;
-            ClientPlayerEntity pl = MinecraftClient.getInstance().player;
-            if (pl != null) pl.sendMessage(Text.literal("[Makro] Server: " + t).formatted(Formatting.GOLD), false);
+            inChatHook = true;
+            try {
+                ClientPlayerEntity pl = MinecraftClient.getInstance().player;
+                if (pl != null) pl.sendMessage(Text.literal("[Makro] Server: " + t).formatted(Formatting.GOLD), false);
+            } finally {
+                inChatHook = false;
+            }
         });
     }
 
@@ -136,7 +143,14 @@ public final class AuctionMacro {
     private static void say(String msg, Formatting color) {
         status = msg;
         ClientPlayerEntity p = MinecraftClient.getInstance().player;
-        if (p != null) p.sendMessage(Text.literal(msg).formatted(color), false);
+        if (p == null) return;
+        boolean was = inChatHook;
+        inChatHook = true; // eigene Meldung: nicht als Server-Antwort behandeln
+        try {
+            p.sendMessage(Text.literal(msg).formatted(color), false);
+        } finally {
+            inChatHook = was;
+        }
     }
 
     // ------------------------------------------------------------------ Tick
@@ -171,6 +185,7 @@ public final class AuctionMacro {
 
     private static void tickInner(MinecraftClient client) {
         pollDump(client);
+        if (watchChat > 0) watchChat--;
         if (state == State.IDLE) return;
 
         ClientPlayerEntity p = client.player;
