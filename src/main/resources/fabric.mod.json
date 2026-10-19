@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "mapartassist",
   "version": "${version}",
-  "name": "MapArt Assist",
+  "name": "Kevin_Josefs Mod-Menü",
   "description": "Platziert automatisch den Block, den du ansiehst. Funktioniert mit Litematica (Easy Place). Mit eigenem Menue und anpassbaren Farben.",
   "authors": ["Du"],
   "license": "MIT",

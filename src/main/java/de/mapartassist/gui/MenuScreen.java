@@ -8,7 +8,11 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
@@ -32,13 +36,14 @@ public class MenuScreen extends Screen {
         MAPART("Map Art"),
         LOOK("Aussehen"),
         CAPES("Capes"),
-        CREATOR("Cape-Creator");
+        CREATOR("Creator"),
+        MACROS("Makros");
 
         final String label;
         Tab(String label) { this.label = label; }
     }
 
-    private static final int W = 480, H = 292, TAB_W = 86;
+    private static final int W = 500, H = 292, TAB_W = 66;
     private static final int S = 100, HUE_W = 14;
     private static final int ROW_H = 30, CAPE_ROWS = 5, LIST_W = 230;
 
@@ -47,6 +52,8 @@ public class MenuScreen extends Screen {
     private static boolean editAccent = true;
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
+    private static int macroScroll = 0;
+    private static String macroStatus = "";
     private static CapeCreator.Fit creatorFit = CapeCreator.Fit.CROP;
     private static CapeCreator.Inner creatorInner = CapeCreator.Inner.MIRROR;
 
@@ -67,7 +74,7 @@ public class MenuScreen extends Screen {
     private boolean suppressHex = false;
 
     public MenuScreen(Screen parent) {
-        super(Text.literal("MapArt Assist"));
+        super(Text.literal("Mod-Menü"));
         this.parent = parent;
         CapeManager.scan();
         CapePreview.clear();
@@ -285,6 +292,46 @@ public class MenuScreen extends Screen {
         }
     }
 
+    private class MacroRow extends Control {
+        final String id;
+
+        MacroRow(int x, int y, int w, String id) {
+            this.x = x; this.y = y; this.w = w; this.h = 26; this.id = id;
+        }
+
+        private Item item() {
+            try {
+                return Registries.ITEM.get(Identifier.of(id));
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            ctx.fill(x, y, x + w, y + h, mix(0xFF262631, alpha(Theme.accent(), 0.25f), hover * 0.6f));
+            Item it = item();
+            if (it != null) {
+                ctx.drawItem(new ItemStack(it), x + 6, y + 5);
+                text(ctx, it.getName().getString(), x + 30, y + 9, 0xFFFFFFFF);
+            } else {
+                text(ctx, id, x + 30, y + 9, 0xFFAA6666);
+            }
+            boolean overX = mx >= x + w - 24 && mx < x + w && my >= y && my < y + h;
+            text(ctx, "✕", x + w - 16, y + 9, overX ? 0xFFFF6666 : 0xFF888890);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            if (mx >= x + w - 24) {
+                ModConfig.get().sellItems.remove(id);
+                ModConfig.save();
+                clearAndInit();
+            }
+        }
+    }
+
     private class PickerControl extends Control {
         int mode = 0; // 1 Farbfeld, 2 Farbton
 
@@ -361,6 +408,7 @@ public class MenuScreen extends Screen {
             case LOOK -> buildLook();
             case CAPES -> buildCapes();
             case CREATOR -> buildCreator();
+            case MACROS -> buildMacros();
         }
     }
 
@@ -447,6 +495,44 @@ public class MenuScreen extends Screen {
         controls.add(new Btn(rx, by + 24, rw, 20,
                 () -> "PNG hineinziehen als: " + (dropAsElytra ? "ELYTRA" : "CAPE"),
                 () -> dropAsElytra = !dropAsElytra));
+    }
+
+    private static final int MACRO_ROWS = 5;
+
+    private void buildMacros() {
+        ModConfig cfg = ModConfig.get();
+        List<String> items = cfg.sellItems;
+        int maxScroll = Math.max(0, items.size() - MACRO_ROWS);
+        macroScroll = Math.max(0, Math.min(macroScroll, maxScroll));
+        for (int i = 0; i < MACRO_ROWS; i++) {
+            int idx = macroScroll + i;
+            if (idx >= items.size()) break;
+            controls.add(new MacroRow(cx + 6, cy + 26 + i * 28, LIST_W - 12, items.get(idx)));
+        }
+        int ay = cy + 26 + MACRO_ROWS * 28 + 2;
+        controls.add(new Btn(cx + 6, ay, 28, 18, () -> "▲", () -> { macroScroll--; clearAndInit(); })
+                .enabledIf(() -> macroScroll > 0));
+        controls.add(new Btn(cx + 38, ay, 28, 18, () -> "▼", () -> { macroScroll++; clearAndInit(); })
+                .enabledIf(() -> macroScroll < maxScroll));
+
+        controls.add(new Btn(cx + LIST_W + 16, cy + 26, cx + cw - (cx + LIST_W + 16) - 6, 20,
+                () -> "Item aus der Hand hinzufügen", () -> {
+            if (client == null || client.player == null || client.player.getMainHandStack().isEmpty()) {
+                macroStatus = "Nimm erst ein Item in die Hand.";
+                return;
+            }
+            String id = Registries.ITEM.getId(client.player.getMainHandStack().getItem()).toString();
+            if (cfg.sellItems.contains(id)) {
+                macroStatus = "Ist schon in der Liste.";
+                return;
+            }
+            cfg.sellItems.add(id);
+            ModConfig.save();
+            macroStatus = "Hinzugefügt: " + client.player.getMainHandStack().getName().getString();
+            clearAndInit();
+        }));
+        controls.add(new Tog(cx + LIST_W + 16, cy + 56, cx + cw - (cx + LIST_W + 16) - 6,
+                "Testlauf (nur anzeigen)", () -> cfg.macroDryRun, v -> cfg.macroDryRun = v));
     }
 
     private void buildCreator() {
@@ -557,8 +643,13 @@ public class MenuScreen extends Screen {
         ctx.fill(left, top, left + Math.round(W * ease), top + 2, acc);
 
         // Titel
-        text(ctx, "MapArt", left + 14, top + 15, acc);
-        text(ctx, "Assist", left + 14 + textRenderer.getWidth("MapArt "), top + 15, 0xFFFFFFFF);
+        String title = ModConfig.get().menuTitle == null || ModConfig.get().menuTitle.isBlank()
+                ? "Mod-Menü" : ModConfig.get().menuTitle;
+        int sp = title.indexOf(' ');
+        String first = sp < 0 ? title : title.substring(0, sp);
+        String rest = sp < 0 ? "" : title.substring(sp);
+        text(ctx, first, left + 14, top + 15, acc);
+        text(ctx, rest, left + 14 + textRenderer.getWidth(first), top + 15, 0xFFFFFFFF);
     }
 
     /** Dezent animiertes Sechseck-Muster: driftet langsam, pulsiert, ein Lichtfleck wandert darueber. */
@@ -670,6 +761,10 @@ public class MenuScreen extends Screen {
                 int rx = cx + LIST_W + 10, rw = cx + cw - rx;
                 card(ctx, rx, cy, rw, 126, null);
             }
+            case MACROS -> {
+                card(ctx, cx, cy - 4, LIST_W, 194, "Auktion: Verkaufsliste");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Einstellungen");
+            }
         }
     }
 
@@ -684,7 +779,24 @@ public class MenuScreen extends Screen {
             case LOOK -> renderLook(ctx);
             case CAPES -> renderCapes(ctx);
             case CREATOR -> renderCreator(ctx);
+            case MACROS -> renderMacros(ctx);
         }
+    }
+
+    private void renderMacros(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        if (cfg.sellItems.isEmpty()) {
+            text(ctx, "Noch keine Items.", cx + 12, cy + 32, 0xFF999999);
+            text(ctx, "Item in die Hand nehmen und", cx + 12, cy + 46, 0xFF777783);
+            text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
+        }
+        int rx = cx + LIST_W + 26;
+        text(ctx, "Befehl: /ahsell  (folgt)", rx, cy + 90, 0xFFCCCCCC);
+        text(ctx, "Verkauft nur Items aus der Liste,", rx, cy + 106, 0xFF777783);
+        text(ctx, "die du gerade im Inventar hast.", rx, cy + 118, 0xFF777783);
+        text(ctx, "Preis-Erkennung: wird noch auf", rx, cy + 138, 0xFFFFD866);
+        text(ctx, "HugoSMP eingestellt.", rx, cy + 150, 0xFFFFD866);
+        text(ctx, macroStatus, cx, top + H - 24, 0xFFFFD866);
     }
 
     private void renderLook(DrawContext ctx) {

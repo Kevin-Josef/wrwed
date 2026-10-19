@@ -8,6 +8,8 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Einstellungen, werden in config/mapartassist.json gespeichert. */
 public class ModConfig {
@@ -26,6 +28,12 @@ public class ModConfig {
     public int maxPerTick = 2;
     /** Name des gewaehlten Capes aus der Bibliothek, leer = keins. */
     public String selectedCape = "";
+    /** Titel im Menue-Kopf. Erstes Wort wird in der Akzentfarbe gezeigt. */
+    public String menuTitle = "Kevin_Josefs Mod-Menü";
+    /** Makros: Items (Registry-IDs, z. B. minecraft:tnt), die verkauft werden sollen. */
+    public List<String> sellItems = new ArrayList<>();
+    /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
+    public boolean macroDryRun = true;
     public int accentColor = DEFAULT_ACCENT; // RGB
     public int bgColor = DEFAULT_BG;         // RGB
 
@@ -45,7 +53,11 @@ public class ModConfig {
         }
         try (Reader r = Files.newBufferedReader(p)) {
             ModConfig loaded = GSON.fromJson(r, ModConfig.class);
-            if (loaded != null) INSTANCE = loaded;
+            if (loaded != null) {
+                // alter Standardtitel (falsch geschrieben) wird automatisch korrigiert
+                if ("Kevin_Josephs Mod-Menü".equals(loaded.menuTitle)) loaded.menuTitle = "Kevin_Josefs Mod-Menü";
+                INSTANCE = loaded;
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
