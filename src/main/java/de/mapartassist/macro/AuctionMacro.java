@@ -153,21 +153,13 @@ public final class AuctionMacro {
                         state = State.CLOSING;
                         timer = 0;
                     } else if (l == null && timer >= 14 && !filterToggleTried) {
-                        // HugoSMP kann mit dem Stack-Filter "Alle" Angebote anzeigen,
-                        // die der exakten Mengen-Suche nicht entsprechen. Der Filter-Button
-                        // liegt im Steuerungsstreifen unter den Angebots-Slots; Rechtsklick
-                        // wechselt den Stack-Filter (Alle -> Nur ganze Stacks -> Nur einzelne Items).
-                        // Einmal pro Suche umschalten und danach erneut scannen.
-                        int filterSlot = 40;
-                        if (p.currentScreenHandler.slots.size() > filterSlot) {
-                            client.interactionManager.clickSlot(p.currentScreenHandler.syncId,
-                                    filterSlot, 1, SlotActionType.PICKUP, p);
-                            filterToggleTried = true;
-                            timer = 0;
-                            say("Kein passendes Angebot im aktuellen Filter; wechsle Stack-Filter und prüfe erneut.", Formatting.GRAY);
-                        } else {
-                            filterToggleTried = true;
-                        }
+                        // Keine blinde Klick-Aktion auf einen angenommenen GUI-Slot:
+                        // das kann je nach Menülayout den falschen Filter/Zustand ändern.
+                        // Im Filter "Alle" sind sowohl Einzelangebote als auch volle Stacks sichtbar;
+                        // für die Preisermittlung werden anschließend nur exakte Mengen akzeptiert.
+                        filterToggleTried = true;
+                        say("Noch kein Angebot mit exakt " + targetAmount(p, cur) + " Stück sichtbar; prüfe die aktuelle Auktionsseite weiter.", Formatting.GRAY);
+                        timer = 0;
                     } else if (timer > 70) {
                         p.closeHandledScreen();
                         say("Kein Angebot für " + targetAmount(p, cur) + "x "
