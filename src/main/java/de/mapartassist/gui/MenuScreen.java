@@ -869,7 +869,7 @@ public class MenuScreen extends Screen {
             }
             case SPAWNER -> {
                 card(ctx, cx, cy - 4, COL, 150, "Spawner-AFK-Schutz");
-                card(ctx, cx + COL2, cy - 4, COL, 150, "So funktioniert es");
+                card(ctx, cx + COL2, cy - 4, COL, 170, "So funktioniert es");
             }
             case CALC -> {
                 card(ctx, cx, cy - 4, 222, 190, null);
@@ -915,6 +915,8 @@ public class MenuScreen extends Screen {
         text(ctx, "legen. Ohne sie: sofort verlassen.", rx, cy + 88, 0xFF777783);
         text(ctx, "Spawner müssen in Reichweite (4 Blöcke)", rx, cy + 109, 0xFF777783);
         text(ctx, "stehen. Taste L schaltet ein/aus.", rx, cy + 122, 0xFF777783);
+        text(ctx, "Pro Spawner: schleichen, abbauen, 1 s", rx, cy + 135, 0xFF777783);
+        text(ctx, "warten, nochmal abbauen (Bestätigung).", rx, cy + 148, 0xFF777783);
         text(ctx, SpawnerGuard.status, cx, top + H - 24, SpawnerGuard.active() ? 0xFFFF6666 : 0xFFFFD866);
     }
 

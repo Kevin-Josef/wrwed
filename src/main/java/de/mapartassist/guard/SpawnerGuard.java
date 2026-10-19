@@ -18,10 +18,16 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * Spawner-AFK-Schutz: Kommt ein anderer Spieler naeher als der eingestellte Radius, baut die Mod
  * alle Spawner in Reichweite mit einer Silk-Touch-Spitzhacke ab und verlaesst danach den Server.
  * Hat man keine Silk-Touch-Spitzhacke dabei, wird sofort verlassen (Spawner bleiben dann heil stehen).
+ *
+ * Abbau-Ablauf pro Spawner (Server-Regel): schleichen, einmal abbauen, ca. 1 s warten
+ * (Bestaetigungsabfrage / "2FA"), denselben Spawner nochmal abbauen.
  */
 public final class SpawnerGuard {
     private SpawnerGuard() {}
@@ -31,7 +37,20 @@ public final class SpawnerGuard {
     /** Reichweite zum Abbauen (Abstand Auge -> Blockmitte). Bewusst etwas unter dem Server-Limit. */
     private static final double REACH = 4.4;
     private static final int SCAN = 5;
-    private static final long TIMEOUT_MS = 20_000;
+    private static final long TIMEOUT_MS = 60_000;
+    /** Wartezeit zwischen erstem und zweitem Abbau (20 Ticks = 1 s). */
+    private static final int CONFIRM_WAIT_TICKS = 20;
+    /** Nach dem zweiten Abbau so lange auf das Verschwinden des Spawners warten. */
+    private static final int VERIFY_TICKS = 20;
+    private static final int MAX_ATTEMPTS = 2;
+
+    private enum Step { SNEAK, BREAK1, WAIT, BREAK2, VERIFY }
+    private static Step step = Step.SNEAK;
+    private static int stepTicks;
+    private static boolean breakStarted;
+    private static int attempts;
+    private static boolean sneakForced;
+    private static final Set<BlockPos> skipped = new HashSet<>();
     /** Ticks zwischen letztem Abbau und Verlassen, damit das Server-Paket sicher ankommt. */
     private static final int LEAVE_DELAY_TICKS = 10;
 
@@ -52,10 +71,31 @@ public final class SpawnerGuard {
         if (phase == Phase.MINING && client != null && client.interactionManager != null) {
             client.interactionManager.cancelBlockBreaking();
         }
+        releaseSneak(client);
         phase = Phase.IDLE;
         current = null;
         mined = 0;
         swapCooldown = 0;
+    }
+
+    private static void holdSneak(MinecraftClient client) {
+        client.options.sneakKey.setPressed(true);
+        sneakForced = true;
+    }
+
+    private static void releaseSneak(MinecraftClient client) {
+        if (sneakForced && client != null && client.options != null) {
+            client.options.sneakKey.setPressed(false);
+        }
+        sneakForced = false;
+    }
+
+    private static void nextSpawner() {
+        current = null;
+        step = Step.SNEAK;
+        stepTicks = 0;
+        breakStarted = false;
+        attempts = 0;
     }
 
     public static boolean hasSilkPickaxe(ClientPlayerEntity p) {
@@ -90,13 +130,14 @@ public final class SpawnerGuard {
                 p.sendMessage(Text.literal("Spawner-Schutz: " + reason + " erkannt!").formatted(Formatting.RED), true);
                 startedAt = System.currentTimeMillis();
                 mined = 0;
-                current = null;
+                skipped.clear();
+                nextSpawner();
                 swapCooldown = 0;
                 if (!cfg.spawnerGuardMine || !hasSilkPickaxe(p) || findSpawner(client, p) == null) {
                     status = !cfg.spawnerGuardMine ? "Spieler erkannt, verlasse Server."
                             : !hasSilkPickaxe(p) ? "Keine Silk-Touch-Spitzhacke! Verlasse Server."
                             : "Keine Spawner in Reichweite, verlasse Server.";
-                    startLeaving();
+                    startLeaving(client);
                 } else {
                     phase = Phase.MINING;
                     status = "Spieler erkannt: baue Spawner ab ...";
@@ -109,7 +150,8 @@ public final class SpawnerGuard {
         }
     }
 
-    private static void startLeaving() {
+    private static void startLeaving(MinecraftClient client) {
+        releaseSneak(client);
         phase = Phase.LEAVING;
         leaveTicks = LEAVE_DELAY_TICKS;
     }
@@ -118,7 +160,7 @@ public final class SpawnerGuard {
         if (System.currentTimeMillis() - startedAt > TIMEOUT_MS) {
             client.interactionManager.cancelBlockBreaking();
             status = "Zeitlimit erreicht, verlasse Server.";
-            startLeaving();
+            startLeaving(client);
             return;
         }
         if (swapCooldown > 0) { swapCooldown--; return; }
@@ -127,32 +169,88 @@ public final class SpawnerGuard {
             if (!equipSilkPick(client, p)) {
                 status = "Silk-Touch-Spitzhacke verschwunden! Verlasse Server.";
                 client.interactionManager.cancelBlockBreaking();
-                startLeaving();
+                startLeaving(client);
                 return;
             }
             swapCooldown = 2;
             return;
         }
 
-        if (current != null && !client.world.getBlockState(current).isOf(Blocks.SPAWNER)) {
-            mined++;
-            current = null;
-        }
         if (current == null) {
             current = findSpawner(client, p);
             if (current == null) {
                 status = mined + " Spawner abgebaut, verlasse Server.";
-                startLeaving();
+                startLeaving(client);
                 return;
             }
         }
 
+        holdSneak(client); // Ohne Schleichen laesst der Server den Abbau nicht zu
+        stepTicks++;
+        boolean isSpawner = client.world.getBlockState(current).isOf(Blocks.SPAWNER);
+        int n = mined + 1;
+
+        switch (step) {
+            case SNEAK -> {
+                status = "Spawner " + n + ": schleiche ...";
+                if (p.isSneaking() || stepTicks > 10) {
+                    step = Step.BREAK1;
+                    stepTicks = 0;
+                    breakStarted = false;
+                }
+            }
+            case BREAK1 -> {
+                status = "Spawner " + n + ": 1. Abbau ...";
+                if (breakTick(client, p)) {
+                    step = Step.WAIT;
+                    stepTicks = 0;
+                }
+            }
+            case WAIT -> {
+                status = "Spawner " + n + ": warte auf Bestätigung ...";
+                if (stepTicks >= CONFIRM_WAIT_TICKS) {
+                    step = isSpawner ? Step.BREAK2 : Step.VERIFY;
+                    stepTicks = 0;
+                    breakStarted = false;
+                }
+            }
+            case BREAK2 -> {
+                status = "Spawner " + n + ": 2. Abbau (Bestätigung) ...";
+                if (!isSpawner || breakTick(client, p)) {
+                    step = Step.VERIFY;
+                    stepTicks = 0;
+                }
+            }
+            case VERIFY -> {
+                if (!isSpawner) {
+                    mined++;
+                    nextSpawner();
+                } else if (stepTicks >= VERIFY_TICKS) {
+                    if (++attempts >= MAX_ATTEMPTS) {
+                        skipped.add(current); // klappt nicht, nicht endlos wiederholen
+                        nextSpawner();
+                    } else {
+                        step = Step.BREAK1; // erneut versuchen (Bestaetigung evtl. abgelaufen)
+                        stepTicks = 0;
+                        breakStarted = false;
+                    }
+                }
+            }
+        }
+    }
+
+    /** Fuehrt einen Abbauvorgang aus. true, sobald der Block fertig abgebaut wurde. */
+    private static boolean breakTick(MinecraftClient client, ClientPlayerEntity p) {
+        if (breakStarted && !client.interactionManager.isBreakingBlock()) {
+            return true; // Fortschritt erreicht 100 %, Vorgang beendet
+        }
         Vec3d eye = p.getEyePos();
         Direction side = Direction.getFacing(
                 eye.x - (current.getX() + 0.5), eye.y - (current.getY() + 0.5), eye.z - (current.getZ() + 0.5));
         client.interactionManager.updateBlockBreakingProgress(current, side);
         p.swingHand(Hand.MAIN_HAND);
-        status = "Baue Spawner ab (" + (mined + 1) + ") ...";
+        breakStarted = true;
+        return false;
     }
 
     private static void leave(MinecraftClient client) {
@@ -180,7 +278,7 @@ public final class SpawnerGuard {
         BlockPos best = null;
         double bestD = REACH * REACH;
         for (BlockPos pos : BlockPos.iterate(base.add(-SCAN, -SCAN, -SCAN), base.add(SCAN, SCAN, SCAN))) {
-            if (!client.world.getBlockState(pos).isOf(Blocks.SPAWNER)) continue;
+            if (!client.world.getBlockState(pos).isOf(Blocks.SPAWNER) || skipped.contains(pos)) continue;
             double d = eye.squaredDistanceTo(Vec3d.ofCenter(pos));
             if (d <= bestD) { bestD = d; best = pos.toImmutable(); }
         }
