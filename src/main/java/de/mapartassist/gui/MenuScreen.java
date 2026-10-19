@@ -874,7 +874,7 @@ public class MenuScreen extends Screen {
         int rx = cx + LIST_W + 26;
         text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 140, 0xFFCCCCCC);
         text(ctx, "Manuellen Preis setzen: /ahmacro preis tnt 200k", rx, cy + 154, 0xFF777783);
-        text(ctx, "Chip "Auto/Manuell" in der Zeile schaltet um. F8 = Diagnose.", rx, cy + 166, 0xFF777783);
+        text(ctx, "Chip Auto/Manuell schaltet um. F8 = Diagnose.", rx, cy + 166, 0xFF777783);
         if (cfg.macroDryRun) {
             text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 178,
                     alpha(0xFF5555, 0.7f + 0.3f * (float) Math.sin(time() * 4)));
