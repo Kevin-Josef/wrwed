@@ -3,6 +3,7 @@ package de.mapartassist;
 import de.mapartassist.combat.CombatLock;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
+import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.macro.AuctionMacro;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
@@ -42,6 +43,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     public static KeyBinding toggleKey;
     public static KeyBinding combatKey;
     public static KeyBinding guiKey;
+    public static KeyBinding spawnerKey;
     private static final KeyBinding.Category CATEGORY =
             KeyBinding.Category.create(Identifier.of("mapartassist", "main"));
 
@@ -77,6 +79,8 @@ public class MapArtAssistClient implements ClientModInitializer {
                 "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY));
         combatKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.combat", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_K, CATEGORY));
+        spawnerKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.spawner", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_L, CATEGORY));
         guiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.gui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, CATEGORY));
         // The guard runs BEFORE vanilla processes input for the tick, i.e. right before
@@ -85,6 +89,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
         ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
+        ClientTickEvents.END_CLIENT_TICK.register(SpawnerGuard::tick);
         // /ahmacro = Auktions-Makro (bewusst NICHT /ah, damit /ah und /ah sell des Servers normal funktionieren)
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 dispatcher.register(ClientCommandManager.literal("ahmacro")
@@ -200,6 +205,14 @@ public class MapArtAssistClient implements ClientModInitializer {
             if (client.player != null) {
                 client.player.sendMessage(Text.literal("HT1 Combat Lock: " + (cfg.combatLock ? "AN" : "AUS"))
                         .formatted(cfg.combatLock ? Formatting.GREEN : Formatting.RED), true);
+            }
+        }
+        while (spawnerKey.wasPressed()) {
+            cfg.spawnerGuard = !cfg.spawnerGuard;
+            ModConfig.save();
+            if (client.player != null) {
+                client.player.sendMessage(Text.literal("Spawner-Schutz: " + (cfg.spawnerGuard ? "AN" : "AUS"))
+                        .formatted(cfg.spawnerGuard ? Formatting.GREEN : Formatting.RED), true);
             }
         }
         while (toggleKey.wasPressed()) {

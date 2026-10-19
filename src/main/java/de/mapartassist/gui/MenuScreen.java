@@ -5,6 +5,7 @@ import de.mapartassist.combat.CombatLock;
 import de.mapartassist.cape.CapeManager;
 import de.mapartassist.cape.CapePreview;
 import de.mapartassist.config.ModConfig;
+import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.input.CharInput;
@@ -42,13 +43,16 @@ public class MenuScreen extends Screen {
         CAPES("Capes"),
         CREATOR("Creator"),
         MACROS("Makros"),
-        HT1("HT1");
+        HT1("HT1"),
+        SPAWNER("Spawner-Schutz"),
+        CALC("Taschenrechner");
 
         final String label;
         Tab(String label) { this.label = label; }
     }
 
-    private static final int W = 520, H = 292, TAB_W = 58;
+    /** Seitenleiste links (Navigation), rechts daneben der Inhalt. */
+    private static final int W = 620, H = 292, SB = 108, TAB_H = 24;
     private static final int S = 100, HUE_W = 14;
     private static final int ROW_H = 30, CAPE_ROWS = 5, LIST_W = 230;
 
@@ -69,7 +73,7 @@ public class MenuScreen extends Screen {
     private final List<Control> controls = new ArrayList<>();
     private Control active = null;
     private boolean wasDown = false;
-    private float tabIndX = -1, tabIndW = TAB_W;
+    private float tabIndY = -1;
     private float tabChangeAt = -10f;
     private String hoverCape = null;
 
@@ -181,10 +185,10 @@ public class MenuScreen extends Screen {
         void draw(DrawContext ctx, int mx, int my) {
             boolean on = tab == activeTab;
             animateHover(mx, my, true);
-            if (on) ctx.fill(x, y, x + w, y + h, alpha(Theme.accent(), 0.16f));
+            if (on) ctx.fill(x, y, x + w, y + h, alpha(Theme.accent(), 0.18f));
             else if (hover > 0.02f) ctx.fill(x, y, x + w, y + h, alpha(0xFFFFFF, 0.08f * hover));
             int col = on ? 0xFFFFFFFF : mix(0xFF9A9AA8, 0xFFFFFFFF, hover);
-            textCentered(ctx, tab.label, x + w / 2, y + (h - 8) / 2 - (int) (hover * 1), col);
+            text(ctx, tab.label, x + 10 + Math.round(hover * 2), y + (h - 8) / 2, col);
         }
 
         @Override
@@ -416,17 +420,16 @@ public class MenuScreen extends Screen {
     protected void init() {
         left = (width - W) / 2;
         top = (height - H) / 2;
-        cx = left + 16;
+        cx = left + SB + 14;
         cy = top + 54;
-        cw = W - 32;
+        cw = W - SB - 28;
         controls.clear();
         active = null;
         hexField = null;
 
         Tab[] tabs = Tab.values();
-        int tx0 = left + W - 12 - tabs.length * TAB_W;
         for (int i = 0; i < tabs.length; i++) {
-            controls.add(new TabBtn(tx0 + i * TAB_W, top + 10, TAB_W, 22, tabs[i]));
+            controls.add(new TabBtn(left + 4, top + 50 + i * TAB_H, SB - 8, TAB_H - 2, tabs[i]));
         }
         controls.add(new Btn(left + W - 96, top + H - 30, 80, 20, () -> "Fertig", this::close));
 
@@ -437,6 +440,8 @@ public class MenuScreen extends Screen {
             case CREATOR -> buildCreator();
             case MACROS -> buildMacros();
             case HT1 -> buildHt1();
+            case SPAWNER -> buildSpawner();
+            case CALC -> buildCalc();
         }
     }
 
@@ -533,6 +538,41 @@ public class MenuScreen extends Screen {
                 () -> cfg.combatLockNeedsPlayer, v -> { cfg.combatLockNeedsPlayer = v; ModConfig.save(); }));
         controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Verzögerung", " s", 0, 19,
                 () -> Math.max(0, Math.min(19, cfg.combatLockDelaySec)), v -> cfg.combatLockDelaySec = v));
+    }
+
+    private void buildSpawner() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 26, COL - 12, "Spawner-Schutz aktiv",
+                () -> cfg.spawnerGuard, v -> { cfg.spawnerGuard = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 54, COL - 12, "Spawner abbauen",
+                () -> cfg.spawnerGuardMine, v -> { cfg.spawnerGuardMine = v; ModConfig.save(); }));
+        controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Erkennungs-Radius", " Blöcke", 10, 100,
+                () -> Math.max(10, Math.min(100, cfg.spawnerGuardRadius)), v -> cfg.spawnerGuardRadius = v));
+    }
+
+    private static final String[][] CALC_KEYS = {
+            {"C", "DEL", "÷", "×"},
+            {"7", "8", "9", "−"},
+            {"4", "5", "6", "+"},
+    };
+
+    private void buildCalc() {
+        int bw = 46, bh = 24, g = 4, x0 = cx + 13, y0 = cy + 38;
+        for (int r = 0; r < CALC_KEYS.length; r++) {
+            for (int c = 0; c < 4; c++) {
+                String k = CALC_KEYS[r][c];
+                controls.add(new Btn(x0 + c * (bw + g), y0 + r * (bh + g), bw, bh, () -> k, () -> TrollCalc.press(k))
+                        .selectedIf(() -> k.length() == 1 && "÷×−+".contains(k)));
+            }
+        }
+        for (int c = 0; c < 3; c++) {
+            String k = String.valueOf(c + 1);
+            controls.add(new Btn(x0 + c * (bw + g), y0 + 3 * (bh + g), bw, bh, () -> k, () -> TrollCalc.press(k)));
+        }
+        controls.add(new Btn(x0 + 3 * (bw + g), y0 + 3 * (bh + g), bw, bh * 2 + g, () -> "=", () -> TrollCalc.press("="))
+                .selectedIf(() -> true));
+        controls.add(new Btn(x0, y0 + 4 * (bh + g), bw * 2 + g, bh, () -> "0", () -> TrollCalc.press("0")));
+        controls.add(new Btn(x0 + 2 * (bw + g), y0 + 4 * (bh + g), bw, bh, () -> ",", () -> TrollCalc.press(",")));
     }
 
     private static final int MACRO_ROWS = 5;
@@ -683,20 +723,28 @@ public class MenuScreen extends Screen {
         int bg = Theme.bg();
         ctx.fillGradient(left, top, left + W, top + H, alpha(mix(bg, 0xFFFFFFFF, 0.07f), 0.97f), alpha(bg, 0.97f));
         drawHexBackground(ctx, time());
-        ctx.fill(left, top, left + W, top + 42, 0x40000000);
-        ctx.fill(left, top + 42, left + W, top + 43, alpha(acc, 0.35f));
-        ctx.fill(left, top + H - 38, left + W, top + H, 0x30000000);
+        // Seitenleiste
+        ctx.fill(left, top, left + SB, top + H, 0x55000000);
+        ctx.fill(left + SB, top, left + SB + 1, top + H, alpha(acc, 0.35f));
+        // Kopf- und Fussleiste des Inhalts
+        ctx.fill(left + SB + 1, top, left + W, top + 42, 0x40000000);
+        ctx.fill(left + SB + 1, top + 42, left + W, top + 43, alpha(acc, 0.35f));
+        ctx.fill(left + SB + 1, top + H - 38, left + W, top + H, 0x30000000);
         outline(ctx, left, top, W, H, alpha(acc, 0.55f));
         ctx.fill(left, top, left + Math.round(W * ease), top + 2, acc);
 
-        // Titel
+        // Titel in der Seitenleiste (erstes Wort in Akzentfarbe, Rest darunter)
         String title = ModConfig.get().menuTitle == null || ModConfig.get().menuTitle.isBlank()
                 ? "Mod-Menü" : ModConfig.get().menuTitle;
         int sp = title.indexOf(' ');
         String first = sp < 0 ? title : title.substring(0, sp);
-        String rest = sp < 0 ? "" : title.substring(sp);
-        text(ctx, first, left + 14, top + 15, acc);
-        text(ctx, rest, left + 14 + textRenderer.getWidth(first), top + 15, 0xFFFFFFFF);
+        String rest = sp < 0 ? "" : title.substring(sp + 1);
+        text(ctx, first, left + 10, top + 10, acc);
+        if (!rest.isEmpty()) text(ctx, rest, left + 10, top + 22, 0xFFFFFFFF);
+        ctx.fill(left + 8, top + 41, left + SB - 8, top + 42, alpha(0xFFFFFF, 0.12f));
+
+        // Ueberschrift des aktiven Bereichs
+        text(ctx, activeTab.label, left + SB + 16, top + 17, 0xFFFFFFFF);
     }
 
     /** Dezent animiertes Sechseck-Muster: driftet langsam, pulsiert, ein Lichtfleck wandert darueber. */
@@ -774,22 +822,19 @@ public class MenuScreen extends Screen {
         for (Control c : snapshot) c.draw(ctx, mouseX, mouseY);
         renderOverlay(ctx);
 
-        // Reiter-Indikator gleitet unter den aktiven Reiter
+        // Reiter-Indikator gleitet an der Seitenleiste zum aktiven Reiter
         for (Control c : snapshot) {
             if (c instanceof TabBtn tb && tb.tab == activeTab) {
-                if (tabIndX < 0) { tabIndX = tb.x; tabIndW = tb.w; }
-                tabIndX += (tb.x - tabIndX) * 0.28f;
-                tabIndW += (tb.w - tabIndW) * 0.28f;
+                if (tabIndY < 0) tabIndY = tb.y;
+                tabIndY += (tb.y - tabIndY) * 0.28f;
+                ctx.fill(left + 1, Math.round(tabIndY), left + 4, Math.round(tabIndY) + tb.h, Theme.accent());
             }
-        }
-        if (tabIndX >= 0) {
-            ctx.fill(Math.round(tabIndX), top + 40, Math.round(tabIndX + tabIndW), top + 43, Theme.accent());
         }
 
         // Ueberblenden beim Reiterwechsel
         float p = Math.min(1f, (time() - tabChangeAt) / 0.22f);
         if (p < 1f) {
-            ctx.fill(left + 1, top + 44, left + W - 1, top + H - 39, alpha(Theme.bg(), 0.85f * (1f - p)));
+            ctx.fill(left + SB + 2, top + 44, left + W - 1, top + H - 39, alpha(Theme.bg(), 0.85f * (1f - p)));
         }
     }
 
@@ -822,6 +867,14 @@ public class MenuScreen extends Screen {
                 card(ctx, cx, cy - 4, COL, 150, "HT1 Combat Lock");
                 card(ctx, cx + COL2, cy - 4, COL, 150, "So funktioniert es");
             }
+            case SPAWNER -> {
+                card(ctx, cx, cy - 4, COL, 150, "Spawner-AFK-Schutz");
+                card(ctx, cx + COL2, cy - 4, COL, 150, "So funktioniert es");
+            }
+            case CALC -> {
+                card(ctx, cx, cy - 4, 222, 190, null);
+                card(ctx, cx + 232, cy - 4, cw - 232, 190, "Verlauf (alles falsch)");
+            }
             case MACROS -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Auktion: Verkaufsliste");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Einstellungen");
@@ -842,7 +895,46 @@ public class MenuScreen extends Screen {
             case CREATOR -> renderCreator(ctx);
             case MACROS -> renderMacros(ctx);
             case HT1 -> renderHt1(ctx);
+            case SPAWNER -> renderSpawner(ctx);
+            case CALC -> renderCalc(ctx);
         }
+    }
+
+    private void renderSpawner(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 122,
+                cfg.spawnerGuard ? 0xFF66DD77 : 0xFFDD6666);
+        boolean pick = client != null && client.player != null && SpawnerGuard.hasSilkPickaxe(client.player);
+        text(ctx, pick ? "Silk-Touch-Spitzhacke: gefunden" : "Silk-Touch-Spitzhacke: FEHLT",
+                cx + 12, cy + 136, pick ? 0xFF66DD77 : 0xFFFFD866);
+        int rx = cx + COL2 + 12;
+        text(ctx, "Kommt ein anderer Spieler in den", rx, cy + 28, 0xFFCCCCCC);
+        text(ctx, "Radius, baut die Mod alle Spawner in", rx, cy + 41, 0xFFCCCCCC);
+        text(ctx, "Reichweite ab und verlässt den Server.", rx, cy + 54, 0xFFCCCCCC);
+        text(ctx, "Silk-Touch-Spitzhacke ins Inventar", rx, cy + 75, 0xFF777783);
+        text(ctx, "legen. Ohne sie: sofort verlassen.", rx, cy + 88, 0xFF777783);
+        text(ctx, "Spawner müssen in Reichweite (4 Blöcke)", rx, cy + 109, 0xFF777783);
+        text(ctx, "stehen. Taste L schaltet ein/aus.", rx, cy + 122, 0xFF777783);
+        text(ctx, SpawnerGuard.status, cx, top + H - 24, SpawnerGuard.active() ? 0xFFFF6666 : 0xFFFFD866);
+    }
+
+    private void renderCalc(DrawContext ctx) {
+        int dx = cx + 13, dy = cy + 2, dw = 196;
+        ctx.fill(dx, dy, dx + dw, dy + 30, 0xFF14141B);
+        outline(ctx, dx, dy, dw, 30, alpha(Theme.accent(), 0.5f));
+        String pend = TrollCalc.pending();
+        text(ctx, pend, dx + dw - 6 - textRenderer.getWidth(pend), dy + 4, 0xFF777783);
+        String disp = TrollCalc.display();
+        text(ctx, disp, dx + dw - 6 - textRenderer.getWidth(disp), dy + 16, 0xFFFFFFFF);
+
+        int rx = cx + 232 + 10;
+        int y = cy + 28;
+        if (TrollCalc.history.isEmpty()) text(ctx, "Noch nichts gerechnet.", rx, y, 0xFF777783);
+        for (String h : TrollCalc.history) {
+            text(ctx, h, rx, y, 0xFFCCCCCC);
+            y += 13;
+        }
+        text(ctx, TrollCalc.comment, rx, cy + 168, 0xFFFFD866);
     }
 
     private void renderHt1(DrawContext ctx) {

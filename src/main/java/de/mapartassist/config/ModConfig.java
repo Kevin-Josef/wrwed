@@ -48,6 +48,12 @@ public class ModConfig {
     public boolean combatLockNeedsPlayer = true;
     /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */
     public int combatLockDelaySec = 0;
+    /** Spawner-AFK-Schutz: bei fremdem Spieler im Radius Spawner abbauen und Server verlassen. */
+    public boolean spawnerGuard = false;
+    /** Radius in Bloecken, ab dem ein anderer Spieler den Schutz ausloest. */
+    public int spawnerGuardRadius = 50;
+    /** true = Spawner mit Silk-Touch-Spitzhacke abbauen, false = nur sofort verlassen. */
+    public boolean spawnerGuardMine = true;
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
     public boolean macroDryRun = false;
     public int accentColor = DEFAULT_ACCENT; // RGB
