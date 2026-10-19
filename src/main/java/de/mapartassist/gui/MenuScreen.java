@@ -1,6 +1,7 @@
 package de.mapartassist.gui;
 
 import de.mapartassist.cape.CapeCreator;
+import de.mapartassist.combat.CombatLock;
 import de.mapartassist.cape.CapeManager;
 import de.mapartassist.cape.CapePreview;
 import de.mapartassist.config.ModConfig;
@@ -38,13 +39,14 @@ public class MenuScreen extends Screen {
         LOOK("Aussehen"),
         CAPES("Capes"),
         CREATOR("Creator"),
-        MACROS("Makros");
+        MACROS("Makros"),
+        HT1("HT1");
 
         final String label;
         Tab(String label) { this.label = label; }
     }
 
-    private static final int W = 500, H = 292, TAB_W = 66;
+    private static final int W = 520, H = 292, TAB_W = 58;
     private static final int S = 100, HUE_W = 14;
     private static final int ROW_H = 30, CAPE_ROWS = 5, LIST_W = 230;
 
@@ -431,6 +433,7 @@ public class MenuScreen extends Screen {
             case CAPES -> buildCapes();
             case CREATOR -> buildCreator();
             case MACROS -> buildMacros();
+            case HT1 -> buildHt1();
         }
     }
 
@@ -519,6 +522,14 @@ public class MenuScreen extends Screen {
                 () -> dropAsElytra = !dropAsElytra));
     }
 
+    private void buildHt1() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 26, COL - 12, "Combat Lock aktiv",
+                () -> cfg.combatLock, v -> { cfg.combatLock = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 54, COL - 12, "Nur bei Spieler in der Nähe",
+                () -> cfg.combatLockNeedsPlayer, v -> { cfg.combatLockNeedsPlayer = v; ModConfig.save(); }));
+    }
+
     private static final int MACRO_ROWS = 5;
 
     private void buildMacros() {
@@ -556,11 +567,13 @@ public class MenuScreen extends Screen {
         controls.add(new Tog(cx + LIST_W + 16, cy + 56, cx + cw - (cx + LIST_W + 16) - 6,
                 "Testlauf (nur anzeigen)", () -> cfg.macroDryRun, v -> cfg.macroDryRun = v));
         int rbx = cx + LIST_W + 16, rbw = cx + cw - rbx - 6;
-        controls.add(new Btn(rbx, cy + 86, (rbw - 4) / 2, 20, () -> "Jetzt starten", () -> {
+        controls.add(new Tog(rbx, cy + 82, rbw, "Wiederholen, bis leer",
+                () -> cfg.macroRepeat, v -> cfg.macroRepeat = v));
+        controls.add(new Btn(rbx, cy + 112, (rbw - 4) / 2, 20, () -> "Jetzt starten", () -> {
             close();
             AuctionMacro.start();
         }).enabledIf(() -> !AuctionMacro.running() && !ModConfig.get().sellItems.isEmpty()));
-        controls.add(new Btn(rbx + (rbw - 4) / 2 + 4, cy + 86, (rbw - 4) / 2, 20, () -> "Stopp",
+        controls.add(new Btn(rbx + (rbw - 4) / 2 + 4, cy + 112, (rbw - 4) / 2, 20, () -> "Stopp",
                 AuctionMacro::stop).enabledIf(AuctionMacro::running));
     }
 
@@ -790,6 +803,10 @@ public class MenuScreen extends Screen {
                 int rx = cx + LIST_W + 10, rw = cx + cw - rx;
                 card(ctx, rx, cy, rw, 126, null);
             }
+            case HT1 -> {
+                card(ctx, cx, cy - 4, COL, 150, "HT1 Combat Lock");
+                card(ctx, cx + COL2, cy - 4, COL, 150, "So funktioniert es");
+            }
             case MACROS -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Auktion: Verkaufsliste");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Einstellungen");
@@ -809,7 +826,22 @@ public class MenuScreen extends Screen {
             case CAPES -> renderCapes(ctx);
             case CREATOR -> renderCreator(ctx);
             case MACROS -> renderMacros(ctx);
+            case HT1 -> renderHt1(ctx);
         }
+    }
+
+    private void renderHt1(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        text(ctx, cfg.combatLock ? "Status: AN" : "Status: AUS", cx + 12, cy + 90,
+                cfg.combatLock ? 0xFF66DD77 : 0xFFDD6666);
+        if (!CombatLock.lastTrigger.isEmpty()) text(ctx, CombatLock.lastTrigger, cx + 12, cy + 106, 0xFFFFD866);
+        int rx = cx + COL2 + 12;
+        text(ctx, "Sobald du Schaden nimmst, trennt die", rx, cy + 28, 0xFFCCCCCC);
+        text(ctx, "Mod sofort die Verbindung zum Server.", rx, cy + 41, 0xFFCCCCCC);
+        text(ctx, "Geprüft wird jeden Frame, die Reaktion", rx, cy + 62, 0xFF777783);
+        text(ctx, "kommt direkt nach dem Treffer-Paket.", rx, cy + 75, 0xFF777783);
+        text(ctx, "Der Server hat den Treffer da schon", rx, cy + 96, 0xFF777783);
+        text(ctx, "gezählt. Taste K schaltet ein/aus.", rx, cy + 109, 0xFF777783);
     }
 
     private void renderMacros(DrawContext ctx) {
@@ -820,11 +852,9 @@ public class MenuScreen extends Screen {
             text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
         }
         int rx = cx + LIST_W + 26;
-        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 116, 0xFFCCCCCC);
-        text(ctx, "Sucht mit /ah <item> den günstigsten", rx, cy + 132, 0xFF777783);
-        text(ctx, "Stückpreis und stellt mit /ah sell ein.", rx, cy + 144, 0xFF777783);
-        text(ctx, "Fester Preis: /ahmacro preis tnt 200k", rx, cy + 160, 0xFF777783);
-        text(ctx, "(zurück: ... tnt auto). F8 = Diagnose.", rx, cy + 172, 0xFF777783);
+        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 140, 0xFFCCCCCC);
+        text(ctx, "Fester Preis: /ahmacro preis tnt 200k", rx, cy + 154, 0xFF777783);
+        text(ctx, "(zurück: ... tnt auto). F8 = Diagnose.", rx, cy + 166, 0xFF777783);
         String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
         text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
     }

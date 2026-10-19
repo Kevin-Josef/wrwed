@@ -52,6 +52,8 @@ public final class AuctionMacro {
     private static Listing best;
     private static int timer;
     private static boolean f8Down = false;
+    private static boolean sentSell = false;
+    private static int countBeforeSell = 0;
 
     public static String status = "";
 
@@ -91,6 +93,7 @@ public final class AuctionMacro {
     }
 
     private static void finish(String msg, Formatting color) {
+        sentSell = false;
         state = State.IDLE;
         queue.clear();
         cur = null;
@@ -189,6 +192,8 @@ public final class AuctionMacro {
                 if (cfg.macroDryRun) {
                     say("[Testlauf] würde senden: /" + cmd + "   " + info, Formatting.AQUA);
                 } else {
+                    countBeforeSell = count(p, cur.item());
+                    sentSell = true;
                     p.networkHandler.sendChatCommand(cmd);
                     say("Gesendet: /" + cmd + "   " + info, Formatting.GREEN);
                 }
@@ -197,6 +202,17 @@ public final class AuctionMacro {
             }
             case DELAY -> {
                 if (timer >= 25) {
+                    // Wiederholen: Wurde etwas eingestellt und ist noch Ware da, dasselbe Item nochmal
+                    // (Preis wird dabei in der Auktion neu gelesen).
+                    if (sentSell && cur != null) {
+                        sentSell = false;
+                        int now = count(p, cur.item());
+                        if (cfg.macroRepeat && now > 0) {
+                            if (now < countBeforeSell) queue.addFirst(cur);
+                            else say("Es wurde nichts eingestellt (Menge unverändert), überspringe "
+                                    + cur.item().getName().getString() + ".", Formatting.YELLOW);
+                        }
+                    }
                     state = State.NEXT;
                     timer = 0;
                 }

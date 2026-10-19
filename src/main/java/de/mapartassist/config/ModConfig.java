@@ -38,6 +38,12 @@ public class ModConfig {
     public Map<String, Integer> sellAmounts = new HashMap<>();
     /** Pro Item: manueller Verkaufspreis (fuer die eingestellte Menge). Fehlt/0 = automatisch aus der Auktion. */
     public Map<String, Long> sellPrices = new HashMap<>();
+    /** Makro: nach jedem Verkauf Preis neu pruefen und erneut einstellen, bis das Item aus dem Inventar leer ist. */
+    public boolean macroRepeat = true;
+    /** HT1 Combat Lock: bei Schaden sofort den Server verlassen. */
+    public boolean combatLock = false;
+    /** Nur ausloesen, wenn ein anderer Spieler in der Naehe ist (ignoriert Fall-/Feuer-/Hungerschaden). */
+    public boolean combatLockNeedsPlayer = true;
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
     public boolean macroDryRun = true;
     public int accentColor = DEFAULT_ACCENT; // RGB

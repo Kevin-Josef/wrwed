@@ -1,5 +1,6 @@
 package de.mapartassist;
 
+import de.mapartassist.combat.CombatLock;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
 import de.mapartassist.macro.AuctionMacro;
@@ -39,6 +40,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     private static final double REACH = 4.5;
 
     public static KeyBinding toggleKey;
+    public static KeyBinding combatKey;
     public static KeyBinding guiKey;
     private static final KeyBinding.Category CATEGORY =
             KeyBinding.Category.create(Identifier.of("mapartassist", "main"));
@@ -72,6 +74,8 @@ public class MapArtAssistClient implements ClientModInitializer {
         ModConfig.load();
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY));
+        combatKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.combat", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_K, CATEGORY));
         guiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.gui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, CATEGORY));
         // The guard runs BEFORE vanilla processes input for the tick, i.e. right before
@@ -79,6 +83,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.START_CLIENT_TICK.register(this::guardClick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
         ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
         // /ahmacro = Auktions-Makro (bewusst NICHT /ah, damit /ah und /ah sell des Servers normal funktionieren)
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 dispatcher.register(ClientCommandManager.literal("ahmacro")
@@ -118,7 +123,10 @@ public class MapArtAssistClient implements ClientModInitializer {
         // A HUD element is drawn once per frame, after the crosshair target was updated.
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "frame_placer"),
-                (ctx, tickCounter) -> onFrame(MinecraftClient.getInstance()));
+                (ctx, tickCounter) -> {
+                    onFrame(MinecraftClient.getInstance());
+                    CombatLock.check(MinecraftClient.getInstance());
+                });
     }
 
     /** Called every rendered frame. Places directly with the exact, freshly validated crosshair hit. */
@@ -184,6 +192,14 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (messageCooldown > 0) messageCooldown--;
 
         while (guiKey.wasPressed()) client.setScreen(new MenuScreen(null));
+        while (combatKey.wasPressed()) {
+            cfg.combatLock = !cfg.combatLock;
+            ModConfig.save();
+            if (client.player != null) {
+                client.player.sendMessage(Text.literal("HT1 Combat Lock: " + (cfg.combatLock ? "AN" : "AUS"))
+                        .formatted(cfg.combatLock ? Formatting.GREEN : Formatting.RED), true);
+            }
+        }
         while (toggleKey.wasPressed()) {
             cfg.autoPlace = !cfg.autoPlace;
             ModConfig.save();
