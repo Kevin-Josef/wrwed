@@ -70,6 +70,8 @@ public class MenuScreen extends Screen {
     private float tabIndX = -1, tabIndW = TAB_W;
     private float tabChangeAt = -10f;
     private String hoverCape = null;
+    private String editingAmountId = null;
+    private String amountInput = "";
 
     // Farbwaehler
     private float hue, sat, val;
@@ -332,6 +334,7 @@ public class MenuScreen extends Screen {
         }
 
         private String amountLabel() {
+            if (id.equals(editingAmountId)) return "[" + (amountInput.isEmpty() ? "_" : amountInput) + "]";
             int a = ModConfig.get().sellAmounts.getOrDefault(id, 0);
             return a == 0 ? "Stack" : a + "x";
         }
@@ -344,14 +347,9 @@ public class MenuScreen extends Screen {
                 ModConfig.save();
                 clearAndInit();
             } else if (mx >= x + w - 80 && mx < x + w - 28) {
-                int[] steps = {0, 1, 4, 8, 16, 32};
-                int cur = ModConfig.get().sellAmounts.getOrDefault(id, 0);
-                int next = steps[0];
-                for (int i = 0; i < steps.length; i++) {
-                    if (steps[i] == cur) { next = steps[(i + 1) % steps.length]; break; }
-                }
-                ModConfig.get().sellAmounts.put(id, next);
-                ModConfig.save();
+                editingAmountId = id;
+                int cur = ModConfig.get().sellAmounts.getOrDefault(id, 64);
+                amountInput = cur > 0 ? Integer.toString(cur) : "64";
             }
         }
     }
@@ -729,6 +727,44 @@ public class MenuScreen extends Screen {
             }
         }
         ctx.disableScissor();
+    }
+
+    @Override
+    public boolean charTyped(char chr, int modifiers) {
+        if (editingAmountId != null) {
+            if (chr >= '0' && chr <= '9' && amountInput.length() < 3) {
+                amountInput += chr;
+            }
+            return true;
+        }
+        return super.charTyped(chr, modifiers);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (editingAmountId != null) {
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!amountInput.isEmpty()) amountInput = amountInput.substring(0, amountInput.length() - 1);
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                int amount = 64;
+                try { amount = Integer.parseInt(amountInput); } catch (NumberFormatException ignored) { }
+                amount = Math.max(1, Math.min(64, amount));
+                ModConfig.get().sellAmounts.put(editingAmountId, amount);
+                ModConfig.save();
+                editingAmountId = null;
+                amountInput = "";
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                editingAmountId = null;
+                amountInput = "";
+                return true;
+            }
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

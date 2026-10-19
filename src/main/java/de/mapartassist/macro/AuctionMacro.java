@@ -29,8 +29,8 @@ import java.util.regex.Pattern;
 
 /**
  * Auktions-Makro fuer HugoSMP:
- *  1. /ah &lt;item&gt; sucht, 2. guenstigstes Angebot (Preis pro Stueck) aus dem Menue lesen,
- *  3. Item in die Hand, 4. /ah sell &lt;preis&gt; [menge] mit demselben Stueckpreis.
+ *  1. /ah &lt;item&gt; sucht, 2. guenstigstes Angebot fuer exakt die Zielmenge lesen,
+ *  3. Item in die Hand, 4. /ah sell &lt;gesamtpreis&gt; &lt;menge&gt; senden.
  * Standardmaessig im Testlauf (sendet nichts).
  */
 public final class AuctionMacro {
@@ -143,7 +143,8 @@ public final class AuctionMacro {
             }
             case WAIT_GUI -> {
                 if (auctionOpen(client, p)) {
-                    Listing l = scan(p, cur.item());
+                    int targetAmount = targetAmount(p, cur);
+                    Listing l = scan(p, cur.item(), targetAmount);
                     if (l != null && timer >= 6) {
                         best = l;
                         p.closeHandledScreen();
@@ -151,7 +152,8 @@ public final class AuctionMacro {
                         timer = 0;
                     } else if (timer > 70) {
                         p.closeHandledScreen();
-                        say("Kein Angebot für " + cur.item().getName().getString() + " gefunden, überspringe.", Formatting.YELLOW);
+                        say("Kein Angebot für " + targetAmount(p, cur) + "x "
+                                + cur.item().getName().getString() + " gefunden, überspringe.", Formatting.YELLOW);
                         state = State.DELAY;
                         timer = 0;
                     }
@@ -182,13 +184,26 @@ public final class AuctionMacro {
                     finish("Item nicht in der Hand. Abgebrochen.", Formatting.RED);
                     return;
                 }
-                int amount = cur.amount() > 0 ? Math.min(cur.amount(), have) : have;
-                long price = cur.manual() > 0 ? cur.manual() : Math.round(best.unit() * amount);
+                int stackLimit = cur.item().getMaxCount();
+                int requested = cur.amount() > 0 ? cur.amount() : stackLimit;
+                int amount = Math.min(Math.min(requested, stackLimit), have);
+                if (cur.manual() <= 0 && best == null) {
+                    finish("Kein gültiger Auktionspreis vorhanden. Abgebrochen.", Formatting.RED);
+                    return;
+                }
+                // Verkaufsbefehl enthält sowohl den berechneten Gesamtpreis als auch
+                // die im Menü konfigurierte Stückzahl.
+                if (cur.manual() <= 0 && best.count() != amount) {
+                    finish("Das gefundene Angebot passt nicht zur Verkaufsmenge (" + amount + "). Abgebrochen.", Formatting.RED);
+                    return;
+                }
+                // Auto-Preis: nur den Gesamtpreis eines Angebots mit exakt dieser Menge nutzen.
+                long price = cur.manual() > 0 ? cur.manual() : best.price();
                 if (price < 1) {
                     finish("Berechneter Preis ist 0. Abgebrochen.", Formatting.RED);
                     return;
                 }
-                String cmd = "ah sell " + price + (amount < have ? " " + amount : "");
+                String cmd = "ah sell " + price + " " + amount;
                 String info = amount + "x " + cur.item().getName().getString()
                         + (cur.manual() > 0 ? " (manueller Preis)"
                         : " (günstigstes Angebot: " + best.price() + " für " + best.count() + ")");
@@ -238,19 +253,30 @@ public final class AuctionMacro {
                 && p.currentScreenHandler != p.playerScreenHandler;
     }
 
-    /** Guenstigstes Angebot (nach Stueckpreis) fuer das Item im geoeffneten Menue. */
-    private static Listing scan(ClientPlayerEntity p, Item item) {
+    /**
+     * Günstigstes Angebot für exakt die gewünschte Menge.
+     * Angebote mit einer anderen Stackgröße werden bewusst nicht umgerechnet.
+     */
+    private static Listing scan(ClientPlayerEntity p, Item item, int targetAmount) {
         Listing bestL = null;
+        if (targetAmount < 1) return null;
         for (Slot slot : p.currentScreenHandler.slots) {
             if (slot.inventory instanceof PlayerInventory) continue;
             ItemStack st = slot.getStack();
-            if (st.isEmpty() || st.getItem() != item) continue;
+            if (st.isEmpty() || st.getItem() != item || st.getCount() != targetAmount) continue;
             long price = readPrice(st);
             if (price <= 0) continue;
             Listing l = new Listing(price, st.getCount());
-            if (bestL == null || l.unit() < bestL.unit()) bestL = l;
+            if (bestL == null || l.price() < bestL.price()) bestL = l;
         }
         return bestL;
+    }
+
+    /** Zielmenge: Menü-Einstellung, begrenzt durch Stacklimit und ersten verfügbaren Inventarstack. */
+    private static int targetAmount(ClientPlayerEntity p, Job job) {
+        int requested = job.amount() > 0 ? job.amount() : job.item().getMaxCount();
+        int available = firstStackCount(p, job.item());
+        return Math.max(0, Math.min(Math.min(requested, job.item().getMaxCount()), available));
     }
 
     private static List<String> loreLines(ItemStack st) {
