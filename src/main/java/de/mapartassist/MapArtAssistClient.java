@@ -3,6 +3,7 @@ package de.mapartassist;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
 import de.mapartassist.macro.AuctionMacro;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.api.ClientModInitializer;
@@ -83,7 +84,37 @@ public class MapArtAssistClient implements ClientModInitializer {
                 dispatcher.register(ClientCommandManager.literal("ahmacro")
                         .executes(c -> { AuctionMacro.start(); return 1; })
                         .then(ClientCommandManager.literal("stop")
-                                .executes(c -> { AuctionMacro.stop(); return 1; }))));
+                                .executes(c -> { AuctionMacro.stop(); return 1; }))
+                        // /ahmacro preis tnt 200k   oder   /ahmacro preis tnt auto
+                        .then(ClientCommandManager.literal("preis")
+                                .then(ClientCommandManager.argument("item", StringArgumentType.word())
+                                        .then(ClientCommandManager.argument("betrag", StringArgumentType.word())
+                                                .executes(c -> {
+                                                    String word = StringArgumentType.getString(c, "item");
+                                                    String id = word.contains(":") ? word : "minecraft:" + word;
+                                                    String val = StringArgumentType.getString(c, "betrag");
+                                                    ModConfig cfg = ModConfig.get();
+                                                    if (!cfg.sellItems.contains(id)) {
+                                                        AuctionMacro.message("\"" + id + "\" ist nicht in der Verkaufsliste.",
+                                                                Formatting.YELLOW);
+                                                        return 0;
+                                                    }
+                                                    if (val.equalsIgnoreCase("auto")) {
+                                                        cfg.sellPrices.remove(id);
+                                                        ModConfig.save();
+                                                        AuctionMacro.message("Preis für " + id + ": automatisch.", Formatting.GREEN);
+                                                        return 1;
+                                                    }
+                                                    long v = AuctionMacro.parseMoney(val);
+                                                    if (v < 1) {
+                                                        AuctionMacro.message("Ungültiger Betrag: " + val, Formatting.RED);
+                                                        return 0;
+                                                    }
+                                                    cfg.sellPrices.put(id, v);
+                                                    ModConfig.save();
+                                                    AuctionMacro.message("Manueller Preis für " + id + ": " + v, Formatting.GREEN);
+                                                    return 1;
+                                                }))))));
         // A HUD element is drawn once per frame, after the crosshair target was updated.
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "frame_placer"),

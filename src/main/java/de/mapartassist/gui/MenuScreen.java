@@ -315,7 +315,8 @@ public class MenuScreen extends Screen {
             Item it = item();
             if (it != null) {
                 ctx.drawItem(new ItemStack(it), x + 6, y + 5);
-                text(ctx, it.getName().getString(), x + 30, y + 9, 0xFFFFFFFF);
+                long mp = ModConfig.get().sellPrices.getOrDefault(id, 0L);
+                text(ctx, it.getName().getString() + (mp > 0 ? "  §7(" + mp + ")" : ""), x + 30, y + 9, 0xFFFFFFFF);
             } else {
                 text(ctx, id, x + 30, y + 9, 0xFFAA6666);
             }
@@ -822,7 +823,8 @@ public class MenuScreen extends Screen {
         text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 116, 0xFFCCCCCC);
         text(ctx, "Sucht mit /ah <item> den günstigsten", rx, cy + 132, 0xFF777783);
         text(ctx, "Stückpreis und stellt mit /ah sell ein.", rx, cy + 144, 0xFF777783);
-        text(ctx, "Auktion offen + F8 = Diagnose-Datei.", rx, cy + 160, 0xFF777783);
+        text(ctx, "Fester Preis: /ahmacro preis tnt 200k", rx, cy + 160, 0xFF777783);
+        text(ctx, "(zurück: ... tnt auto). F8 = Diagnose.", rx, cy + 172, 0xFF777783);
         String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
         text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
     }

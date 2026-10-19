@@ -36,6 +36,8 @@ public class ModConfig {
     public List<String> sellItems = new ArrayList<>();
     /** Pro Item: wie viele pro Verkauf (0 = ganzer Stack). */
     public Map<String, Integer> sellAmounts = new HashMap<>();
+    /** Pro Item: manueller Verkaufspreis (fuer die eingestellte Menge). Fehlt/0 = automatisch aus der Auktion. */
+    public Map<String, Long> sellPrices = new HashMap<>();
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
     public boolean macroDryRun = true;
     public int accentColor = DEFAULT_ACCENT; // RGB

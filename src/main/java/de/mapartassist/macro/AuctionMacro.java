@@ -38,7 +38,7 @@ public final class AuctionMacro {
 
     private enum State { IDLE, NEXT, WAIT_GUI, CLOSING, SELECT, SELL, DELAY }
 
-    private record Job(Item item, int amount) {}
+    private record Job(Item item, int amount, long manual) {}
     private record Listing(long price, int count) {
         double unit() { return price / (double) count; }
     }
@@ -74,7 +74,7 @@ public final class AuctionMacro {
             } catch (Exception e) {
                 continue;
             }
-            if (count(p, it) > 0) queue.add(new Job(it, cfg.sellAmounts.getOrDefault(id, 0)));
+            if (count(p, it) > 0) queue.add(new Job(it, cfg.sellAmounts.getOrDefault(id, 0), cfg.sellPrices.getOrDefault(id, 0L)));
         }
         if (queue.isEmpty()) {
             say("Nichts zu verkaufen: Keins der Items aus der Liste ist im Inventar.", Formatting.YELLOW);
@@ -124,6 +124,11 @@ public final class AuctionMacro {
                 if (cur == null) { finish("Makro fertig.", Formatting.GREEN); return; }
                 if (count(p, cur.item()) == 0) return; // naechstes Item im naechsten Tick
                 best = null;
+                if (cur.manual() > 0) { // manueller Preis: keine Auktionssuche
+                    state = State.SELECT;
+                    timer = 0;
+                    return;
+                }
                 String search = Registries.ITEM.getId(cur.item()).getPath();
                 say("Suche günstigstes Angebot: " + search, Formatting.GRAY);
                 p.networkHandler.sendChatCommand("ah " + search);
@@ -172,14 +177,15 @@ public final class AuctionMacro {
                     return;
                 }
                 int amount = cur.amount() > 0 ? Math.min(cur.amount(), have) : have;
-                long price = Math.round(best.unit() * amount);
+                long price = cur.manual() > 0 ? cur.manual() : Math.round(best.unit() * amount);
                 if (price < 1) {
                     finish("Berechneter Preis ist 0. Abgebrochen.", Formatting.RED);
                     return;
                 }
                 String cmd = "ah sell " + price + (amount < have ? " " + amount : "");
                 String info = amount + "x " + cur.item().getName().getString()
-                        + " (günstigstes Angebot: " + best.price() + " für " + best.count() + ")";
+                        + (cur.manual() > 0 ? " (manueller Preis)"
+                        : " (günstigstes Angebot: " + best.price() + " für " + best.count() + ")");
                 if (cfg.macroDryRun) {
                     say("[Testlauf] würde senden: /" + cmd + "   " + info, Formatting.AQUA);
                 } else {
@@ -201,10 +207,10 @@ public final class AuctionMacro {
 
     // ------------------------------------------------------------------ Auktions-Menue lesen
 
+    /** Irgendein Kisten-Menue ist offen (der Titel der Auktion ist ein Resourcepack-Bild, daher keine Titelpruefung). */
     private static boolean auctionOpen(MinecraftClient client, ClientPlayerEntity p) {
-        return client.currentScreen instanceof HandledScreen<?> hs
-                && p.currentScreenHandler != p.playerScreenHandler
-                && hs.getTitle().getString().toUpperCase().contains("AUKTION");
+        return client.currentScreen instanceof HandledScreen<?>
+                && p.currentScreenHandler != p.playerScreenHandler;
     }
 
     /** Guenstigstes Angebot (nach Stueckpreis) fuer das Item im geoeffneten Menue. */
@@ -239,6 +245,23 @@ public final class AuctionMacro {
         }
         return -1;
     }
+
+    /** "200k", "1.5m", "240.000", "240000" -> Zahl. -1 bei Fehler. */
+    public static long parseMoney(String raw) {
+        String t = raw.trim().toLowerCase().replace("$", "");
+        long mult = 1;
+        if (t.endsWith("k")) { mult = 1_000L; t = t.substring(0, t.length() - 1); }
+        else if (t.endsWith("m")) { mult = 1_000_000L; t = t.substring(0, t.length() - 1); }
+        else if (t.endsWith("b")) { mult = 1_000_000_000L; t = t.substring(0, t.length() - 1); }
+        try {
+            if (mult == 1) return parsePrice(t);
+            return Math.round(Double.parseDouble(t.replace(',', '.')) * mult);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    public static void message(String msg, Formatting color) { say(msg, color); }
 
     static long parsePrice(String raw) {
         String s = raw.replaceAll("[.,]+$", "");
