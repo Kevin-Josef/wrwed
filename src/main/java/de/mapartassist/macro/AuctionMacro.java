@@ -212,8 +212,8 @@ public final class AuctionMacro {
                         int now = count(p, cur.item());
                         if (cfg.macroRepeat && now > 0) {
                             if (now < countBeforeSell) queue.addFirst(cur);
-                            else say("Es wurde nichts eingestellt (Menge unverändert), überspringe "
-                                    + cur.item().getName().getString() + ".", Formatting.YELLOW);
+                            else say("Inventarmenge unverändert nach /ah sell. Serverannahme nicht bestätigt; "
+                                    + cur.item().getName().getString() + " wird zur Sicherheit übersprungen.", Formatting.YELLOW);
                         }
                     }
                     state = State.NEXT;

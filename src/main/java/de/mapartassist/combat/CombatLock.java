@@ -4,11 +4,12 @@ import de.mapartassist.config.ModConfig;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
 /**
- * HT1 Combat Lock: verlaesst den Server, sobald man Schaden nimmt (optional nach 0-19 Sekunden).
+ * HT1 Combat Lock: verlaesst den Server nur bei Schaden durch einen anderen Spieler (optional nach 0-19 Sekunden).
  * Wird pro Frame UND pro Tick geprueft, damit die Reaktion sofort nach dem Treffer-Paket erfolgt.
  */
 public final class CombatLock {
@@ -45,6 +46,13 @@ public final class CombatLock {
                 || (lastHealth >= 0 && p.getHealth() < lastHealth - 0.01f);
         lastHurt = p.hurtTime;
         lastHealth = p.getHealth();
+
+        // Combat Lock nur bei Schaden durch einen anderen Spieler ausloesen.
+        // Fall-, Feuer-, Hunger- und Mob-Schaden ignorieren.
+        DamageSource source = p.getRecentDamageSource();
+        boolean playerHit = source != null && source.getAttacker() instanceof PlayerEntity attacker
+                && attacker != p;
+        if (!playerHit) hurt = false;
         long now = System.currentTimeMillis();
 
         // laufender Countdown

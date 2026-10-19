@@ -40,3 +40,4 @@ Pro Item Menge (Stack/1/4/8/16/32). Testlauf standardmaessig AN. F8 bei offenem 
 1.9.1: Testlauf deutlicher: roter Hinweis im Chat beim Start, blinkender Hinweis im Makros-Reiter, Startknopf 'Starten (Test)'.
 
 1.9.2: HT1 Combat Lock: Regler 0-19 s Verzoegerung zwischen Treffer und Verlassen (Countdown in der Hotbar-Anzeige und im HT1-Reiter).
+\n1.9.2 Fix-Paket (Quellcode, noch nicht kompiliert/getestet):\n- HT1 Combat Lock reagiert nur noch auf Schaden, dessen letzte DamageSource einen anderen Spieler als Angreifer hat; Fall-/Mob-Schaden soll ignoriert werden.\n- Auktions-Makro: Testlauf ist bei neuer Konfiguration standardmaessig aus. Bei unveraenderter Inventarmenge wird klar angezeigt, dass die Serverannahme nicht bestaetigt wurde.\n

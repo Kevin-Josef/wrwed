@@ -70,8 +70,6 @@ public class ModConfig {
             if (loaded != null) {
                 // alter Standardtitel (falsch geschrieben) wird automatisch korrigiert
                 if ("Kevin_Josephs Mod-Menü".equals(loaded.menuTitle)) loaded.menuTitle = "Kevin_Josefs Mod-Menü";
-                // Ensure a previous saved test-run setting cannot silently block real sales.
-                loaded.macroDryRun = false;
                 INSTANCE = loaded;
             }
         } catch (Exception e) {
