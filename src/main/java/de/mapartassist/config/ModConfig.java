@@ -47,7 +47,7 @@ public class ModConfig {
     /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */
     public int combatLockDelaySec = 0;
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
-    public boolean macroDryRun = true;
+    public boolean macroDryRun = false;
     public int accentColor = DEFAULT_ACCENT; // RGB
     public int bgColor = DEFAULT_BG;         // RGB
 
@@ -70,6 +70,8 @@ public class ModConfig {
             if (loaded != null) {
                 // alter Standardtitel (falsch geschrieben) wird automatisch korrigiert
                 if ("Kevin_Josephs Mod-Menü".equals(loaded.menuTitle)) loaded.menuTitle = "Kevin_Josefs Mod-Menü";
+                // Ensure a previous saved test-run setting cannot silently block real sales.
+                loaded.macroDryRun = false;
                 INSTANCE = loaded;
             }
         } catch (Exception e) {
