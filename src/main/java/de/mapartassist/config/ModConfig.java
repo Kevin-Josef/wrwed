@@ -9,7 +9,9 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Einstellungen, werden in config/mapartassist.json gespeichert. */
 public class ModConfig {
@@ -32,6 +34,8 @@ public class ModConfig {
     public String menuTitle = "Kevin_Josefs Mod-Menü";
     /** Makros: Items (Registry-IDs, z. B. minecraft:tnt), die verkauft werden sollen. */
     public List<String> sellItems = new ArrayList<>();
+    /** Pro Item: wie viele pro Verkauf (0 = ganzer Stack). */
+    public Map<String, Integer> sellAmounts = new HashMap<>();
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
     public boolean macroDryRun = true;
     public int accentColor = DEFAULT_ACCENT; // RGB

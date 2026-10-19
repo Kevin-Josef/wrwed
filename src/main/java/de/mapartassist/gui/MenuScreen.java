@@ -4,6 +4,7 @@ import de.mapartassist.cape.CapeCreator;
 import de.mapartassist.cape.CapeManager;
 import de.mapartassist.cape.CapePreview;
 import de.mapartassist.config.ModConfig;
+import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.screen.Screen;
@@ -320,14 +321,34 @@ public class MenuScreen extends Screen {
             }
             boolean overX = mx >= x + w - 24 && mx < x + w && my >= y && my < y + h;
             text(ctx, "✕", x + w - 16, y + 9, overX ? 0xFFFF6666 : 0xFF888890);
+
+            int ax = x + w - 80, aw = 52;
+            boolean overA = mx >= ax && mx < ax + aw && my >= y && my < y + h;
+            ctx.fill(ax, y + 4, ax + aw, y + h - 4, overA ? alpha(Theme.accent(), 0.45f) : 0xFF33333F);
+            textCentered(ctx, amountLabel(), ax + aw / 2, y + 9, 0xFFFFFFFF);
+        }
+
+        private String amountLabel() {
+            int a = ModConfig.get().sellAmounts.getOrDefault(id, 0);
+            return a == 0 ? "Stack" : a + "x";
         }
 
         @Override
         void press(int mx, int my) {
             if (mx >= x + w - 24) {
                 ModConfig.get().sellItems.remove(id);
+                ModConfig.get().sellAmounts.remove(id);
                 ModConfig.save();
                 clearAndInit();
+            } else if (mx >= x + w - 80 && mx < x + w - 28) {
+                int[] steps = {0, 1, 4, 8, 16, 32};
+                int cur = ModConfig.get().sellAmounts.getOrDefault(id, 0);
+                int next = steps[0];
+                for (int i = 0; i < steps.length; i++) {
+                    if (steps[i] == cur) { next = steps[(i + 1) % steps.length]; break; }
+                }
+                ModConfig.get().sellAmounts.put(id, next);
+                ModConfig.save();
             }
         }
     }
@@ -533,6 +554,13 @@ public class MenuScreen extends Screen {
         }));
         controls.add(new Tog(cx + LIST_W + 16, cy + 56, cx + cw - (cx + LIST_W + 16) - 6,
                 "Testlauf (nur anzeigen)", () -> cfg.macroDryRun, v -> cfg.macroDryRun = v));
+        int rbx = cx + LIST_W + 16, rbw = cx + cw - rbx - 6;
+        controls.add(new Btn(rbx, cy + 86, (rbw - 4) / 2, 20, () -> "Jetzt starten", () -> {
+            close();
+            AuctionMacro.start();
+        }).enabledIf(() -> !AuctionMacro.running() && !ModConfig.get().sellItems.isEmpty()));
+        controls.add(new Btn(rbx + (rbw - 4) / 2 + 4, cy + 86, (rbw - 4) / 2, 20, () -> "Stopp",
+                AuctionMacro::stop).enabledIf(AuctionMacro::running));
     }
 
     private void buildCreator() {
@@ -791,12 +819,12 @@ public class MenuScreen extends Screen {
             text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
         }
         int rx = cx + LIST_W + 26;
-        text(ctx, "Befehl: /ahsell  (folgt)", rx, cy + 90, 0xFFCCCCCC);
-        text(ctx, "Verkauft nur Items aus der Liste,", rx, cy + 106, 0xFF777783);
-        text(ctx, "die du gerade im Inventar hast.", rx, cy + 118, 0xFF777783);
-        text(ctx, "Preis-Erkennung: wird noch auf", rx, cy + 138, 0xFFFFD866);
-        text(ctx, "HugoSMP eingestellt.", rx, cy + 150, 0xFFFFD866);
-        text(ctx, macroStatus, cx, top + H - 24, 0xFFFFD866);
+        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 116, 0xFFCCCCCC);
+        text(ctx, "Sucht mit /ah <item> den günstigsten", rx, cy + 132, 0xFF777783);
+        text(ctx, "Stückpreis und stellt mit /ah sell ein.", rx, cy + 144, 0xFF777783);
+        text(ctx, "Auktion offen + F8 = Diagnose-Datei.", rx, cy + 160, 0xFF777783);
+        String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
+        text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
     }
 
     private void renderLook(DrawContext ctx) {

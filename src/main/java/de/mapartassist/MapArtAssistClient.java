@@ -2,6 +2,9 @@ package de.mapartassist;
 
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
+import de.mapartassist.macro.AuctionMacro;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -74,6 +77,13 @@ public class MapArtAssistClient implements ClientModInitializer {
         // our synthetic right-click would actually be used.
         ClientTickEvents.START_CLIENT_TICK.register(this::guardClick);
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
+        ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
+        // /ahmacro = Auktions-Makro (bewusst NICHT /ah, damit /ah und /ah sell des Servers normal funktionieren)
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
+                dispatcher.register(ClientCommandManager.literal("ahmacro")
+                        .executes(c -> { AuctionMacro.start(); return 1; })
+                        .then(ClientCommandManager.literal("stop")
+                                .executes(c -> { AuctionMacro.stop(); return 1; }))));
         // A HUD element is drawn once per frame, after the crosshair target was updated.
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "frame_placer"),
