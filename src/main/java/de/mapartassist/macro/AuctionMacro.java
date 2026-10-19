@@ -11,6 +11,7 @@ import net.minecraft.component.type.LoreComponent;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.registry.Registries;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
@@ -70,7 +71,7 @@ public final class AuctionMacro {
         if (chatHooked) return;
         chatHooked = true;
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (overlay || watchChat <= 0 || inChatHook) return;
+            if (watchChat <= 0 || inChatHook) return;
             String t = message.getString();
             // Eigene Makro-Meldungen nie erneut verarbeiten (sonst Endlosschleife).
             if (t.isBlank() || t.startsWith("[Makro]")) return;
@@ -78,7 +79,7 @@ public final class AuctionMacro {
             inChatHook = true;
             try {
                 ClientPlayerEntity pl = MinecraftClient.getInstance().player;
-                if (pl != null) pl.sendMessage(Text.literal("[Makro] Server: " + t).formatted(Formatting.GOLD), false);
+                if (pl != null) pl.sendMessage(Text.literal((overlay ? "[Makro] Server (Actionbar): " : "[Makro] Server: ") + t).formatted(Formatting.GOLD), false);
             } finally {
                 inChatHook = false;
             }
@@ -256,7 +257,11 @@ public final class AuctionMacro {
                 timer = 0;
             }
             case SELL -> {
-                if (timer < 3) return; // Inventar-Wechsel setzen lassen
+                if (timer == 1 && !cfg.macroDryRun) {
+                    // Dem Server den gewaehlten Hotbar-Slot sofort mitteilen.
+                    p.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(p.getInventory().getSelectedSlot()));
+                }
+                if (timer < 10) return; // Inventar-Wechsel + Slot-Sync beim Server setzen lassen
                 int stackLimit = cur.item().getMaxCount();
                 int have = cfg.macroDryRun ? firstFullStackCount(p, cur.item()) : handCount(p, cur.item());
                 if (have < stackLimit) {
@@ -294,6 +299,9 @@ public final class AuctionMacro {
                     watchChat = 100;
                     p.networkHandler.sendChatCommand(cmd);
                     say("Gesendet: /" + cmd + "   " + info, Formatting.GREEN);
+                    say("Hand: " + p.getMainHandStack().getCount() + "x "
+                            + p.getMainHandStack().getName().getString() + " (Hotbar-Slot "
+                            + (p.getInventory().getSelectedSlot() + 1) + ")", Formatting.GRAY);
                     state = State.CONFIRM;
                     timer = 0;
                     return;
@@ -332,6 +340,9 @@ public final class AuctionMacro {
                     if (sentSell && cur != null) {
                         sentSell = false;
                         int now = count(p, cur.item());
+                        say("Nach /ah sell: " + now + " im Inventar (vorher " + countBeforeSell + ")"
+                                + (now < countBeforeSell ? " -> verkauft/eingestellt." : " -> unverändert."),
+                                now < countBeforeSell ? Formatting.GREEN : Formatting.YELLOW);
                         if (now >= countBeforeSell) {
                             failedSells++;
                             if (failedSells >= 2) {
