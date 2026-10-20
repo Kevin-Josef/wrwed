@@ -3,5 +3,8 @@
   "key.mapartassist.gui": "Open Kevin_Josefs Mod-Menü menu",
   "key.category.mapartassist.main": "Kevin_Josefs Mod-Menü",
   "key.mapartassist.combat": "Toggle HT1 Combat Lock",
-  "key.mapartassist.spawner": "Toggle Spawner Guard"
+  "key.mapartassist.spawner": "Toggle Spawner Guard",
+  "key.mapartassist.freecam": "Toggle freecam",
+  "key.mapartassist.record": "Record movement start/stop",
+  "key.mapartassist.play": "Play movement / stop"
 }

@@ -1,6 +1,9 @@
 package de.mapartassist;
 
+import de.mapartassist.cam.Freecam;
 import de.mapartassist.combat.CombatLock;
+import de.mapartassist.litematica.SchematicProgress;
+import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.chat.ChatCoordinates;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
@@ -46,6 +49,9 @@ public class MapArtAssistClient implements ClientModInitializer {
     public static KeyBinding combatKey;
     public static KeyBinding guiKey;
     public static KeyBinding spawnerKey;
+    public static KeyBinding freecamKey;
+    public static KeyBinding recordKey;
+    public static KeyBinding playKey;
     private static final KeyBinding.Category CATEGORY =
             KeyBinding.Category.create(Identifier.of("mapartassist", "main"));
 
@@ -84,11 +90,21 @@ public class MapArtAssistClient implements ClientModInitializer {
                 "key.mapartassist.combat", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_K, CATEGORY));
         spawnerKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.spawner", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_L, CATEGORY));
+        freecamKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.freecam", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F7, CATEGORY));
+        recordKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.record", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_1, CATEGORY));
+        playKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.play", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_2, CATEGORY));
         guiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.gui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, CATEGORY));
         // The guard runs BEFORE vanilla processes input for the tick, i.e. right before
         // our synthetic right-click would actually be used.
         ClientTickEvents.START_CLIENT_TICK.register(this::guardClick);
+        ClientTickEvents.START_CLIENT_TICK.register(MovementRecorder::tickStart);
+        ClientTickEvents.START_CLIENT_TICK.register(Freecam::tickStart);
+        ClientTickEvents.END_CLIENT_TICK.register(MovementRecorder::tickEnd);
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> SchematicProgress.tick(mc, tickCounter));
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
         ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
@@ -136,6 +152,15 @@ public class MapArtAssistClient implements ClientModInitializer {
                 (ctx, tickCounter) -> {
                     onFrame(MinecraftClient.getInstance());
                     CombatLock.check(MinecraftClient.getInstance());
+                    Freecam.update(MinecraftClient.getInstance());
+                });
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+                Identifier.of("mapartassist", "progress_hud"),
+                (ctx, tickCounter) -> {
+                    MinecraftClient mc = MinecraftClient.getInstance();
+                    if (!ModConfig.get().progressHud || mc.options == null || mc.options.hudHidden) return;
+                    String t = SchematicProgress.hudText();
+                    if (t != null) ctx.drawTextWithShadow(mc.textRenderer, t, 6, 6, 0xFFFFFFFF);
                 });
     }
 
@@ -211,6 +236,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         BlockPos target = hit.getBlockPos().offset(hit.getSide());
         BlockState wanted = schematic.getBlockState(target);
         if (wanted.isAir()) return;
+        if (cfg.progressSkipPlacing && SchematicProgress.isExcluded(wanted.getBlock())) return;
         BlockState actual = client.world.getBlockState(target);
         if (actual.getBlock() == wanted.getBlock()) return;
         if (!actual.isAir() && !actual.isReplaceable()) return;
@@ -253,6 +279,9 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (tickCounter % 40 == 0) recentAttempts.values().removeIf(t -> tickCounter - t > 40);
         if (messageCooldown > 0) messageCooldown--;
 
+        while (freecamKey.wasPressed()) Freecam.toggle(client);
+        while (recordKey.wasPressed()) MovementRecorder.toggleRecord(client);
+        while (playKey.wasPressed()) MovementRecorder.togglePlay(client);
         while (guiKey.wasPressed()) client.setScreen(new MenuScreen(null));
         while (combatKey.wasPressed()) {
             cfg.combatLock = !cfg.combatLock;
@@ -345,6 +374,7 @@ public class MapArtAssistClient implements ClientModInitializer {
 
         BlockState wanted = schematic.getBlockState(target);
         if (wanted.isAir()) return;
+        if (cfg.progressSkipPlacing && SchematicProgress.isExcluded(wanted.getBlock())) return;
 
         BlockState actual = world.getBlockState(target);
         if (actual.getBlock() == wanted.getBlock()) return;

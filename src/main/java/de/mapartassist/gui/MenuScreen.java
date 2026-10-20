@@ -4,7 +4,10 @@ import de.mapartassist.cape.CapeCreator;
 import de.mapartassist.combat.CombatLock;
 import de.mapartassist.cape.CapeManager;
 import de.mapartassist.cape.CapePreview;
+import de.mapartassist.cam.Freecam;
 import de.mapartassist.config.ModConfig;
+import de.mapartassist.litematica.SchematicProgress;
+import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.client.gui.DrawContext;
@@ -45,10 +48,12 @@ public class MenuScreen extends Screen {
         AUCTION("Makros", "Auktions-Makro"),
         HT1("Makros", "HT1 Combat Lock"),
         SPAWNER("Makros", "Spawner-Schutz"),
+        RECORDER("Makros", "Bewegungs-Recorder"),
         CAPES("Kosmetik", "Capes"),
         CREATOR("Kosmetik", "Cape Creator"),
         CALC(null, "Taschenrechner"),
         MAPART("Litematica", "Map Art"),
+        PROGRESS("Litematica", "Fortschritt"),
         SETTINGS(null, "Design"),
         ADMIN_LOGIN(null, "Admin-Panel"),
         ADMIN(null, "Admin-Panel");
@@ -72,6 +77,9 @@ public class MenuScreen extends Screen {
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
     private static int macroScroll = 0;
+    private static int recScroll = 0;
+    private static int progScroll = 0;
+    private int progSeen = -1;
     private static String macroStatus = "";
     private static CapeCreator.Fit creatorFit = CapeCreator.Fit.CROP;
     private static CapeCreator.Inner creatorInner = CapeCreator.Inner.MIRROR;
@@ -189,7 +197,7 @@ public class MenuScreen extends Screen {
         }
     }
 
-    /** Kachel auf der Startseite. */
+    /** Kachel auf der Startseite (kompakt, ein Bereich pro Gruppe). */
     private class Tile extends Control {
         final Tab tab;
 
@@ -206,20 +214,20 @@ public class MenuScreen extends Screen {
             outline(ctx, x, yy, w, h, alpha(acc, 0.18f + 0.55f * hover));
             ctx.fill(x, yy, x + Math.round(w * (0.25f + 0.75f * hover)), yy + 2, acc);
 
-            ctx.fill(x + 10, yy + 12, x + 42, yy + 44, alpha(acc, 0.16f + 0.14f * hover));
-            outline(ctx, x + 10, yy + 12, 32, 32, alpha(acc, 0.35f));
-            ctx.drawItem(new ItemStack(tileItem(tab)), x + 18, yy + 20);
+            ctx.fill(x + 8, yy + 8, x + 38, yy + 38, alpha(acc, 0.16f + 0.14f * hover));
+            outline(ctx, x + 8, yy + 8, 30, 30, alpha(acc, 0.35f));
+            Item it = tileItem(tab);
+            ctx.drawItem(new ItemStack(it), x + 15, yy + 15);
 
-            text(ctx, tab.label, x + 10, yy + 51, 0xFFFFFFFF);
-            text(ctx, tileSub(tab), x + 10, yy + 63, 0xFF8A8A96);
-
+            text(ctx, tileName(tab), x + 45, yy + 10, 0xFFFFFFFF);
             String st = tileStatus(tab);
             if (st != null) {
                 boolean good = !st.equals("AUS");
                 int cw0 = textRenderer.getWidth(st) + 8;
-                int sx = x + w - cw0 - 8;
-                ctx.fill(sx, yy + 10, sx + cw0, yy + 22, good ? alpha(0x34D399, 0.30f) : alpha(0xFFFFFF, 0.08f));
-                text(ctx, st, sx + 4, yy + 12, good ? 0xFF66DD99 : 0xFF8A8A96);
+                ctx.fill(x + 45, yy + 23, x + 45 + cw0, yy + 35, good ? alpha(0x34D399, 0.30f) : alpha(0xFFFFFF, 0.08f));
+                text(ctx, st, x + 49, yy + 25, good ? 0xFF66DD99 : 0xFF8A8A96);
+            } else {
+                text(ctx, tileSub(tab), x + 45, yy + 24, 0xFF8A8A96);
             }
         }
 
@@ -455,6 +463,60 @@ public class MenuScreen extends Screen {
         }
     }
 
+    private class RecRow extends Control {
+        final MovementRecorder.Rec r;
+
+        RecRow(int x, int y, int w, MovementRecorder.Rec r) {
+            this.x = x; this.y = y; this.w = w; this.h = 26; this.r = r;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            boolean sel = r.name.equals(ModConfig.get().selectedRecording);
+            int acc = Theme.accent();
+            ctx.fill(x, y, x + w, y + h, mix(sel ? alpha(acc, 0.25f) : 0xFF262631, alpha(acc, 0.30f), hover * 0.6f));
+            if (sel) ctx.fill(x, y, x + 3, y + h, acc);
+            text(ctx, r.name, x + 10, y + 9, sel ? 0xFFFFFFFF : 0xFFDDDDDD);
+            String len = String.format(java.util.Locale.ROOT, "%.1f s", r.size() / 20f);
+            text(ctx, len, x + w - 8 - textRenderer.getWidth(len), y + 9, 0xFF8A8A96);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            ModConfig.get().selectedRecording = r.name;
+            ModConfig.save();
+        }
+    }
+
+    private class ProgRow extends Control {
+        final SchematicProgress.Stat st;
+
+        ProgRow(int x, int y, int w, SchematicProgress.Stat st) {
+            this.x = x; this.y = y; this.w = w; this.h = 24; this.st = st;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            boolean ex = SchematicProgress.isExcluded(st.block);
+            int acc = Theme.accent();
+            ctx.fill(x, y, x + w, y + h, mix(ex ? 0xFF2E2A22 : 0xFF262631, alpha(acc, 0.28f), hover * 0.6f));
+            Item it = st.block.asItem();
+            if (it != Items.AIR) ctx.drawItem(new ItemStack(it), x + 4, y + 4);
+            String name = shorten(st.block.getName().getString(), 15);
+            text(ctx, name, x + 24, y + 4, ex ? 0xFF8A8A96 : 0xFFFFFFFF);
+            String right = ex ? "ausgeschlossen" : st.done + "/" + st.total;
+            text(ctx, right, x + w - 6 - textRenderer.getWidth(right), y + 4, ex ? 0xFFE0A030 : 0xFF9A9AA8);
+            float f = st.total == 0 ? 0f : st.done / (float) st.total;
+            ctx.fill(x + 24, y + h - 5, x + w - 6, y + h - 3, 0xFF14141B);
+            ctx.fill(x + 24, y + h - 5, x + 24 + Math.round((w - 30) * f), y + h - 3, ex ? 0xFFE0A030 : acc);
+        }
+
+        @Override
+        void press(int mx, int my) { SchematicProgress.toggleExcluded(st.block); }
+    }
+
     private class PickerControl extends Control {
         int mode = 0; // 1 Farbfeld, 2 Farbton
 
@@ -544,6 +606,8 @@ public class MenuScreen extends Screen {
             case AUCTION -> buildMacros();
             case HT1 -> buildHt1();
             case SPAWNER -> buildSpawner();
+            case RECORDER -> buildRecorder();
+            case PROGRESS -> buildProgress();
             case CALC -> buildCalc();
             case ADMIN_LOGIN -> buildAdminLogin();
             case ADMIN -> buildAdmin();
@@ -560,16 +624,27 @@ public class MenuScreen extends Screen {
 
     // ---- Startseite
 
-    private static final Tab[] HOME_TILES = {
-            Tab.AUCTION, Tab.HT1, Tab.SPAWNER, Tab.MAPART,
-            Tab.CAPES, Tab.CREATOR, Tab.CALC, Tab.SETTINGS};
+    private record Group(String title, int row, int side, Tab[] tabs) {}
+
+    private static final Group[] GROUPS = {
+            new Group("Makros", 0, -1, new Tab[]{Tab.AUCTION, Tab.HT1, Tab.SPAWNER, Tab.RECORDER}),
+            new Group("Kosmetik", 1, 0, new Tab[]{Tab.CAPES, Tab.CREATOR}),
+            new Group("Litematica", 1, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
+            new Group("Extras", 2, 0, new Tab[]{Tab.CALC, Tab.SETTINGS}),
+    };
+    private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
+
+    private int groupX(Group g) { return g.side() == 1 ? left + 14 + 2 * TILE_W + TILE_GAP + 12 : left + 14; }
+    private int groupY(Group g) { return top + 48 + g.row() * 68; }
 
     private static Item tileItem(Tab t) {
         return switch (t) {
             case AUCTION -> Items.GOLD_INGOT;
             case HT1 -> Items.IRON_SWORD;
             case SPAWNER -> Items.SPAWNER;
+            case RECORDER -> Items.CLOCK;
             case MAPART -> Items.FILLED_MAP;
+            case PROGRESS -> Items.WRITABLE_BOOK;
             case CAPES -> Items.ELYTRA;
             case CREATOR -> Items.PAINTING;
             case CALC -> Items.COMPARATOR;
@@ -577,34 +652,49 @@ public class MenuScreen extends Screen {
         };
     }
 
+    private static String tileName(Tab t) {
+        return switch (t) {
+            case RECORDER -> "Recorder";
+            case PROGRESS -> "Fortschritt";
+            case CREATOR -> "Creator";
+            case CALC -> "Rechner";
+            default -> t.label;
+        };
+    }
+
     private static String tileSub(Tab t) {
         return switch (t) {
-            case AUCTION -> "Items automatisch verkaufen";
-            case HT1 -> "Bei Schaden sofort raus";
-            case SPAWNER -> "AFK-Schutz fürs Farmen";
-            case MAPART -> "Auto-Platzieren";
-            case CAPES -> "Deine Cape-Bibliothek";
-            case CREATOR -> "Bild zu Cape machen";
-            case CALC -> "Rechnen mit Verlauf";
-            default -> "Farben & Hintergrund";
+            case RECORDER -> "Aufnehmen & Loop";
+            case PROGRESS -> "Prozent & Blöcke";
+            case CAPES -> "Bibliothek";
+            case CREATOR -> "Bild zu Cape";
+            case CALC -> "Mit Verlauf";
+            case SETTINGS -> "Farben & Effekte";
+            default -> "";
         };
     }
 
     private static String tileStatus(Tab t) {
         ModConfig c = ModConfig.get();
         return switch (t) {
-            case AUCTION -> AuctionMacro.running() ? "LÄUFT" : null;
+            case AUCTION -> AuctionMacro.running() ? "LÄUFT" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
             case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
             case MAPART -> c.autoPlace ? "AN" : "AUS";
+            case RECORDER -> switch (MovementRecorder.state) {
+                case RECORDING -> "REC";
+                case PLAYING -> "LÄUFT";
+                default -> "AUS";
+            };
             default -> null;
         };
     }
 
     private void buildHome() {
-        int gap = 10, gx = left + 14, tw = (W - 28 - 3 * gap) / 4, th = 80, gy = top + 74;
-        for (int i = 0; i < HOME_TILES.length; i++) {
-            controls.add(new Tile(gx + (i % 4) * (tw + gap), gy + (i / 4) * (th + gap), tw, th, HOME_TILES[i]));
+        for (Group g : GROUPS) {
+            for (int i = 0; i < g.tabs().length; i++) {
+                controls.add(new Tile(groupX(g) + i * (TILE_W + TILE_GAP), groupY(g) + 14, TILE_W, TILE_H, g.tabs()[i]));
+            }
         }
     }
 
@@ -633,7 +723,12 @@ public class MenuScreen extends Screen {
         ModConfig cfg = ModConfig.get();
         controls.add(new Tog(cx + 6, cy + 28, COL - 12, "Chat-Koordinaten",
                 () -> cfg.chatCoords, v -> { cfg.chatCoords = v; ModConfig.save(); }));
-        controls.add(new Btn(cx + 10, cy + 126, COL - 20, 20, () -> "Admin-Panel sperren", () -> {
+        int rx = cx + COL2;
+        controls.add(new Tog(rx + 6, cy + 28, COL - 12, "Freecam",
+                () -> Freecam.active(), v -> Freecam.set(client, v)));
+        controls.add(new Sld(rx + 12, cy + 58, COL - 24, "Geschwindigkeit", " Blöcke/s", 1, 40,
+                () -> cfg.freecamSpeed, v -> cfg.freecamSpeed = v));
+        controls.add(new Btn(left + 14, top + H - 30, 130, 20, () -> "Admin-Panel sperren", () -> {
             adminUnlocked = false;
             openTab(Tab.HOME);
         }));
@@ -766,6 +861,98 @@ public class MenuScreen extends Screen {
 
     private static String shorten(String s, int max) {
         return s.length() <= max ? s : s.substring(0, max - 1) + "…";
+    }
+
+    private static final int REC_ROWS = 5;
+
+    private void buildRecorder() {
+        ModConfig cfg = ModConfig.get();
+        List<MovementRecorder.Rec> list = MovementRecorder.list();
+        int maxScroll = Math.max(0, list.size() - REC_ROWS);
+        recScroll = Math.max(0, Math.min(recScroll, maxScroll));
+        for (int i = 0; i < REC_ROWS; i++) {
+            int idx = recScroll + i;
+            if (idx >= list.size()) break;
+            controls.add(new RecRow(cx + 6, cy + 26 + i * 28, LIST_W - 12, list.get(idx)));
+        }
+        int ay = cy + 26 + REC_ROWS * 28 + 2;
+        controls.add(new Btn(cx + 6, ay, 28, 18, () -> "▲", () -> { recScroll--; clearAndInit(); })
+                .enabledIf(() -> recScroll > 0));
+        controls.add(new Btn(cx + 38, ay, 28, 18, () -> "▼", () -> { recScroll++; clearAndInit(); })
+                .enabledIf(() -> recScroll < maxScroll));
+
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        controls.add(new Btn(rx, cy + 26, rw, 20,
+                () -> MovementRecorder.state == MovementRecorder.State.RECORDING ? "Aufnahme beenden" : "Aufnahme starten", () -> {
+            net.minecraft.client.MinecraftClient mc = client;
+            if (MovementRecorder.state == MovementRecorder.State.RECORDING) {
+                MovementRecorder.stopRecording(mc);
+                clearAndInit();
+            } else {
+                close();
+                MovementRecorder.startRecording(mc);
+            }
+        }).enabledIf(() -> MovementRecorder.state != MovementRecorder.State.PLAYING)
+                .selectedIf(() -> MovementRecorder.state == MovementRecorder.State.RECORDING));
+        int hw = (rw - 4) / 2;
+        controls.add(new Btn(rx, cy + 50, hw, 20, () -> "Abspielen", () -> {
+            net.minecraft.client.MinecraftClient mc = client;
+            close();
+            MovementRecorder.startPlaying(mc);
+        }).enabledIf(() -> MovementRecorder.state == MovementRecorder.State.IDLE
+                && MovementRecorder.find(cfg.selectedRecording) != null));
+        controls.add(new Btn(rx + hw + 4, cy + 50, hw, 20, () -> "Stopp", () -> MovementRecorder.stopAll(client))
+                .enabledIf(() -> MovementRecorder.state != MovementRecorder.State.IDLE));
+        controls.add(new Tog(rx - 6, cy + 78, rw + 12, "Endlos wiederholen", () -> cfg.recEndless, v -> cfg.recEndless = v));
+        controls.add(new Sld(rx + 2, cy + 106, rw - 4, "Wiederholungen", "x", 1, 99,
+                () -> Math.max(1, Math.min(99, cfg.recRepeats)), v -> cfg.recRepeats = v));
+        controls.add(new Tog(rx - 6, cy + 136, rw + 12, "Blickrichtung anpassen", () -> cfg.recRelativeYaw, v -> cfg.recRelativeYaw = v));
+        controls.add(new Btn(rx, cy + 162, rw, 18, () -> "Ausgewählte löschen", () -> {
+            MovementRecorder.delete(cfg.selectedRecording);
+            clearAndInit();
+        }).enabledIf(() -> MovementRecorder.find(cfg.selectedRecording) != null
+                && MovementRecorder.state == MovementRecorder.State.IDLE));
+    }
+
+    private static final int PROG_ROWS = 5;
+
+    private void buildProgress() {
+        ModConfig cfg = ModConfig.get();
+        if (!SchematicProgress.hasData() && !SchematicProgress.scanning()) SchematicProgress.start(client);
+        progSeen = SchematicProgress.version();
+
+        List<SchematicProgress.Stat> list = SchematicProgress.sorted();
+        int maxScroll = Math.max(0, list.size() - PROG_ROWS);
+        progScroll = Math.max(0, Math.min(progScroll, maxScroll));
+        for (int i = 0; i < PROG_ROWS; i++) {
+            int idx = progScroll + i;
+            if (idx >= list.size()) break;
+            controls.add(new ProgRow(cx + 6, cy + 42 + i * 26, LIST_W - 12, list.get(idx)));
+        }
+        int ay = cy + 42 + PROG_ROWS * 26 + 2;
+        controls.add(new Btn(cx + 6, ay, 28, 16, () -> "▲", () -> { progScroll--; clearAndInit(); })
+                .enabledIf(() -> progScroll > 0));
+        controls.add(new Btn(cx + 38, ay, 28, 16, () -> "▼", () -> { progScroll++; clearAndInit(); })
+                .enabledIf(() -> progScroll < maxScroll));
+
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        controls.add(new Btn(rx, cy + 42, rw, 20, () -> SchematicProgress.scanning() ? "Prüfe …" : "Jetzt prüfen",
+                () -> SchematicProgress.start(client)).enabledIf(() -> !SchematicProgress.scanning()));
+        controls.add(new Tog(rx - 6, cy + 68, rw + 12, "Ausgeschlossene = fertig",
+                () -> cfg.progressExcludedDone, v -> { cfg.progressExcludedDone = v; ModConfig.save(); }));
+        controls.add(new Tog(rx - 6, cy + 92, rw + 12, "Ausgeschlossene nicht setzen",
+                () -> cfg.progressSkipPlacing, v -> { cfg.progressSkipPlacing = v; ModConfig.save(); }));
+        controls.add(new Tog(rx - 6, cy + 116, rw + 12, "Prozent im Spiel zeigen",
+                () -> cfg.progressHud, v -> { cfg.progressHud = v; ModConfig.save(); }));
+        controls.add(new Btn(rx, cy + 144, rw, 18, () -> "Block aus Hand ausschließen", () -> {
+            if (client == null || client.player == null || !(client.player.getMainHandStack().getItem() instanceof net.minecraft.item.BlockItem bi)) {
+                SchematicProgress.status = "Nimm erst einen Block in die Hand.";
+                return;
+            }
+            if (!SchematicProgress.isExcluded(bi.getBlock())) SchematicProgress.toggleExcluded(bi.getBlock());
+        }));
+        controls.add(new Btn(rx, cy + 166, rw, 18, () -> "Alle Ausschlüsse löschen", SchematicProgress::clearExcluded)
+                .enabledIf(() -> !cfg.progressExcluded.isEmpty()));
     }
 
     private void buildCapes() {
@@ -1223,6 +1410,10 @@ public class MenuScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        if (activeTab == Tab.PROGRESS && SchematicProgress.version() != progSeen) {
+            progSeen = SchematicProgress.version();
+            clearAndInit();
+        }
         if (pendingUnlock) {
             pendingUnlock = false;
             adminUnlocked = true;
@@ -1289,7 +1480,15 @@ public class MenuScreen extends Screen {
             case ADMIN_LOGIN -> card(ctx, left + W / 2 - 130, cy - 4, 260, 124, "Admin-Panel");
             case ADMIN -> {
                 card(ctx, cx, cy - 4, COL, 158, "Chat-Koordinaten");
-                card(ctx, cx + COL2, cy - 4, COL, 158, "So funktioniert es");
+                card(ctx, cx + COL2, cy - 4, COL, 158, "Freecam");
+            }
+            case RECORDER -> {
+                card(ctx, cx, cy - 4, LIST_W, 194, "Aufnahmen");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Steuerung");
+            }
+            case PROGRESS -> {
+                card(ctx, cx, cy + 16, LIST_W, 174, "Blöcke (Klick = ausschließen)");
+                card(ctx, cx + LIST_W + 10, cy + 16, cw - LIST_W - 10, 174, "Einstellungen");
             }
             case HOME -> { }
             case CAPES -> {
@@ -1334,6 +1533,8 @@ public class MenuScreen extends Screen {
             case HT1 -> renderHt1(ctx);
             case SPAWNER -> renderSpawner(ctx);
             case CALC -> renderCalc(ctx);
+            case RECORDER -> renderRecorder(ctx);
+            case PROGRESS -> renderProgress(ctx);
             case HOME -> renderHome(ctx);
             case ADMIN_LOGIN -> renderAdminLogin(ctx);
             case ADMIN -> renderAdmin(ctx);
@@ -1341,15 +1542,63 @@ public class MenuScreen extends Screen {
     }
 
     private void renderHome(DrawContext ctx) {
-        text(ctx, "Wähle einen Bereich", left + 14, top + 54, 0xFFCCCCCC);
+        int acc = Theme.accent();
+        for (Group g : GROUPS) {
+            int gx = groupX(g), gy = groupY(g);
+            int gw = g.tabs().length * TILE_W + (g.tabs().length - 1) * TILE_GAP;
+            String l = g.title().toUpperCase(java.util.Locale.ROOT);
+            text(ctx, l, gx + 2, gy + 2, alpha(acc, 0.9f));
+            int lx = gx + 8 + textRenderer.getWidth(l);
+            ctx.fill(lx, gy + 6, gx + gw, gy + 7, alpha(0xFFFFFF, 0.12f));
+        }
         ModConfig c = ModConfig.get();
         List<String> on = new ArrayList<>();
         if (c.autoPlace) on.add("Auto-Platzieren");
         if (c.combatLock) on.add("Combat Lock");
         if (c.spawnerGuard) on.add("Spawner-Schutz");
         if (AuctionMacro.running()) on.add("Auktions-Makro");
+        if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");
         text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
                 left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);
+    }
+
+    private void renderRecorder(DrawContext ctx) {
+        if (MovementRecorder.list().isEmpty()) {
+            text(ctx, "Noch keine Aufnahmen.", cx + 12, cy + 32, 0xFF999999);
+            text(ctx, "Aufnahme starten, dann normal", cx + 12, cy + 46, 0xFF777783);
+            text(ctx, "spielen (graben, laufen ...) und", cx + 12, cy + 58, 0xFF777783);
+            text(ctx, "mit Num 1 beenden.", cx + 12, cy + 70, 0xFF777783);
+        }
+        String st = switch (MovementRecorder.state) {
+            case RECORDING -> "Status: AUFNAHME";
+            case PLAYING -> "Status: SPIELT AB";
+            default -> "";
+        };
+        String s = !st.isEmpty() ? st : MovementRecorder.status;
+        boolean hasStatus = s != null && !s.isEmpty();
+        text(ctx, hasStatus ? s : "Tasten: Num 1 = Aufnahme, Num 2 = Abspielen / Stopp",
+                cx, top + H - 24, hasStatus ? 0xFFFFD866 : 0xFF777783);
+    }
+
+    private void renderProgress(DrawContext ctx) {
+        int acc = Theme.accent();
+        int bx = cx, by = cy - 4, bw = cw, bh = 16;
+        ctx.fill(bx, by, bx + bw, by + bh, 0xFF14141B);
+        double pct = SchematicProgress.percent();
+        ctx.fill(bx, by, bx + (int) Math.round(bw * pct / 100.0), by + bh, alpha(acc, 0.55f));
+        outline(ctx, bx, by, bw, bh, alpha(acc, 0.5f));
+        long[] t = SchematicProgress.totals();
+        String label = SchematicProgress.hasData()
+                ? String.format(java.util.Locale.ROOT, "%.1f %%   (%d / %d Blöcke)", pct, t[0], t[1])
+                : "Noch keine Daten";
+        textCentered(ctx, label, bx + bw / 2, by + 4, 0xFFFFFFFF);
+        if (SchematicProgress.sorted().isEmpty()) {
+            text(ctx, "Keine Daten.", cx + 12, cy + 48, 0xFF999999);
+            text(ctx, "Schematic laden und platzieren,", cx + 12, cy + 62, 0xFF777783);
+            text(ctx, "dann \"Jetzt prüfen\" klicken.", cx + 12, cy + 74, 0xFF777783);
+        }
+        String st = SchematicProgress.status;
+        text(ctx, st == null ? "" : shorten(st, 78), cx, top + H - 24, 0xFFFFD866);
     }
 
     private void drawWrapped(DrawContext ctx, String s, int x, int y, int maxW, int color) {
@@ -1383,117 +1632,15 @@ public class MenuScreen extends Screen {
         ModConfig c = ModConfig.get();
         text(ctx, c.chatCoords ? "Status: AN" : "Status: AUS", cx + 12, cy + 62, c.chatCoords ? 0xFF66DD77 : 0xFFDD6666);
         drawWrapped(ctx, "Zeigt unter jeder Chatnachricht die Position (X / Y / Z) des Absenders.",
-                cx + 12, cy + 78, COL - 24, 0xFF999999);
-        int rx = cx + COL2 + 12;
-        drawWrapped(ctx, "Die Position kommt aus deiner lokal geladenen Welt, also nur für Spieler in Render-Distanz.",
-                rx, cy + 28, COL - 24, 0xFFCCCCCC);
-        drawWrapped(ctx, "Ist der Absender weiter weg, steht dort \"Position unbekannt\". Seine echten Koordinaten kennt der Client dann nicht.",
-                rx, cy + 62, COL - 24, 0xFF777783);
-        drawWrapped(ctx, "Dafür wäre ein Server-Plugin nötig.", rx, cy + 106, COL - 24, 0xFF777783);
-    }
-
-    private void renderSpawner(DrawContext ctx) {
-        ModConfig cfg = ModConfig.get();
-        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 120,
-                cfg.spawnerGuard ? 0xFF66DD77 : 0xFFDD6666);
-        boolean pick = client != null && client.player != null && SpawnerGuard.hasSilkPickaxe(client.player);
-        text(ctx, pick ? "Silk-Touch-Spitzhacke: gefunden" : "Silk-Touch-Spitzhacke: FEHLT",
-                cx + 12, cy + 131, pick ? 0xFF66DD77 : 0xFFFFD866);
-        text(ctx, "Ablauf: Spieler erkannt, Spawner", cx + 12, cy + 146, 0xFF777783);
-        text(ctx, "abbauen, Befehl, ggf. verlassen.", cx + 12, cy + 157, 0xFF777783);
-        text(ctx, "Spawner in 4 Blöcken. Taste L = an/aus.", cx + 12, cy + 168, 0xFF777783);
+                cx + 12, cy + 78, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "Nur für Spieler in Render-Distanz. Bei weiter entfernten steht \"Position unbekannt\", ihre Koordinaten kennt der Client nicht (dafür bräuchte es ein Server-Plugin).",
+                cx + 12, cy + 102, COL - 24, 0xFF777783);
 
         int rx = cx + COL2 + 12;
-        text(ctx, "Befehl oder Text (z. B. /spawn):", rx, cy + 56, 0xFFCCCCCC);
-        if (!cfg.spawnerGuardCommand) {
-            text(ctx, "Befehl aus: es wird immer verlassen.", rx, cy + 152, 0xFFFFD866);
-        } else if (!cfg.spawnerGuardLeaveAfter) {
-            text(ctx, "Nach dem Befehl bleibst du online.", rx, cy + 152, 0xFF777783);
-            text(ctx, "Der Schutz schaltet sich dann aus.", rx, cy + 163, 0xFF777783);
-        } else {
-            text(ctx, "Nach dem Befehl wartest du kurz,", rx, cy + 152, 0xFF777783);
-            text(ctx, "dann wird der Server verlassen.", rx, cy + 163, 0xFF777783);
-        }
-        text(ctx, SpawnerGuard.status, cx, top + H - 24, SpawnerGuard.active() ? 0xFFFF6666 : 0xFFFFD866);
-    }
-
-    private void renderCalc(DrawContext ctx) {
-        int dx = cx + 13, dy = cy + 2, dw = 196;
-        ctx.fill(dx, dy, dx + dw, dy + 30, 0xFF14141B);
-        outline(ctx, dx, dy, dw, 30, alpha(Theme.accent(), 0.5f));
-        String pend = TrollCalc.pending();
-        text(ctx, pend, dx + dw - 6 - textRenderer.getWidth(pend), dy + 4, 0xFF777783);
-        String disp = TrollCalc.display();
-        text(ctx, disp, dx + dw - 6 - textRenderer.getWidth(disp), dy + 16, 0xFFFFFFFF);
-
-        int rx = cx + 232 + 10;
-        int y = cy + 28;
-        if (TrollCalc.history.isEmpty()) text(ctx, "Noch nichts gerechnet.", rx, y, 0xFF777783);
-        for (String h : TrollCalc.history) {
-            text(ctx, h, rx, y, 0xFFCCCCCC);
-            y += 13;
-        }
-    }
-
-    private void renderHt1(DrawContext ctx) {
-        ModConfig cfg = ModConfig.get();
-        text(ctx, cfg.combatLock ? "Status: AN" : "Status: AUS", cx + 12, cy + 122,
-                cfg.combatLock ? 0xFF66DD77 : 0xFFDD6666);
-        long rem = CombatLock.remainingMs();
-        if (rem >= 0) {
-            text(ctx, "Verlasse Server in " + (int) Math.ceil(rem / 1000.0) + " s", cx + 12, cy + 136, 0xFFFF6666);
-        } else if (!CombatLock.lastTrigger.isEmpty()) {
-            text(ctx, CombatLock.lastTrigger, cx + 12, cy + 136, 0xFFFFD866);
-        }
-        int rx = cx + COL2 + 12;
-        text(ctx, "Sobald du Schaden nimmst, trennt die", rx, cy + 28, 0xFFCCCCCC);
-        text(ctx, "Mod die Verbindung (0 s = sofort).", rx, cy + 41, 0xFFCCCCCC);
-        text(ctx, "Geprüft wird jeden Frame, die Reaktion", rx, cy + 62, 0xFF777783);
-        text(ctx, "kommt direkt nach dem Treffer-Paket.", rx, cy + 75, 0xFF777783);
-        text(ctx, "Der Server hat den Treffer da schon", rx, cy + 96, 0xFF777783);
-        text(ctx, "gezählt. Taste K schaltet ein/aus.", rx, cy + 109, 0xFF777783);
-    }
-
-    private void renderMacros(DrawContext ctx) {
-        ModConfig cfg = ModConfig.get();
-        if (cfg.sellItems.isEmpty()) {
-            text(ctx, "Noch keine Items.", cx + 12, cy + 32, 0xFF999999);
-            text(ctx, "Item in die Hand nehmen und", cx + 12, cy + 46, 0xFF777783);
-            text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
-        }
-        int rx = cx + LIST_W + 26;
-        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 140, 0xFFCCCCCC);
-        text(ctx, "Manuellen Preis setzen: /ahmacro preis tnt 200k", rx, cy + 154, 0xFF777783);
-        text(ctx, "Chip Auto/Manuell schaltet um. F8 = Diagnose.", rx, cy + 166, 0xFF777783);
-        if (cfg.macroDryRun) {
-            text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 178,
-                    alpha(0xFF5555, 0.7f + 0.3f * (float) Math.sin(time() * 4)));
-        }
-        String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
-        text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
-    }
-
-    private void renderSettings(DrawContext ctx) {
-        int lx = designX();
-        int rx = lx + 14 + S + 10 + HUE_W + 16;
-        text(ctx, "#", rx - 9, cy + 55, 0xFFCCCCCC);
-        text(ctx, "Vorschau", rx, cy + 100, 0xFFCCCCCC);
-        int sw = lx + SET_A - 10 - rx;
-        ctx.fill(rx - 1, cy + 111, rx + sw + 1, cy + 129, 0xFF000000);
-        ctx.fill(rx, cy + 112, rx + sw, cy + 128, 0xFF000000 | editedColor());
-        text(ctx, "Voreinstellungen", lx + 14, cy + 150, 0xFF777783);
-
-        int bx = lx + SET_A + SET_GAP, px = bx + SET_B + SET_GAP;
-        if (ModConfig.get().bgStyle == 6 && BackgroundImage.get() == null) {
-            text(ctx, "PNG/JPG ins Fenster ziehen", bx + 10, cy + 108, 0xFFFFD866);
-        }
-        text(ctx, "Menü-Titel (fest)", px + 10, cy + 22, 0xFF999999);
-        int pw = left + W - 14 - px;
-        ctx.fill(px + 10, cy + 33, px + pw - 10, cy + 51, 0x40000000);
-        outline(ctx, px + 10, cy + 33, pw - 20, 18, alpha(Theme.accent(), 0.3f));
-        text(ctx, shorten(ModConfig.DEFAULT_TITLE, 20), px + 15, cy + 38, 0xFFAAAAB6);
-        String bs = BackgroundImage.status;
-        text(ctx, bs == null ? "" : bs, left + 14, top + H - 24, 0xFFFFD866);
+        drawWrapped(ctx, "Kamera fliegt frei, dein Spieler bleibt stehen. Taste F7 schaltet um.",
+                rx, cy + 92, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "W/A/S/D bewegen, Leertaste hoch, Shift runter, Strg schneller.",
+                rx, cy + 116, COL - 24, 0xFF777783);
     }
 
     private void renderCapes(DrawContext ctx) {

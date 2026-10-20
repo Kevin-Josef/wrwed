@@ -3,5 +3,8 @@
   "key.mapartassist.gui": "MapArt-Assist-Menü öffnen",
   "key.category.mapartassist.main": "Kevin_Josefs Mod-Menü",
   "key.mapartassist.combat": "HT1 Combat Lock an/aus",
-  "key.mapartassist.spawner": "Spawner-Schutz an/aus"
+  "key.mapartassist.spawner": "Spawner-Schutz an/aus",
+  "key.mapartassist.freecam": "Freecam an/aus",
+  "key.mapartassist.record": "Bewegung aufnehmen Start/Stopp",
+  "key.mapartassist.play": "Bewegung abspielen/Stopp"
 }

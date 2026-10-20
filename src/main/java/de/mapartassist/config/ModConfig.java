@@ -35,6 +35,21 @@ public class ModConfig {
     public String menuTitle = DEFAULT_TITLE;
     /** Chat-Koordinaten (Admin-Panel): bei Chatnachrichten die Position des Absenders anzeigen. */
     public boolean chatCoords = false;
+    /** Freecam-Geschwindigkeit in Bloecken pro Sekunde. */
+    public int freecamSpeed = 8;
+    /** Bewegungs-Recorder: endlos wiederholen / Anzahl Wiederholungen / Blickrichtung relativ zum Start. */
+    public boolean recEndless = false;
+    public int recRepeats = 1;
+    public boolean recRelativeYaw = true;
+    public String selectedRecording = "";
+    /** Schematic-Fortschritt: ausgeschlossene Bloecke (Registry-IDs). */
+    public List<String> progressExcluded = new ArrayList<>();
+    /** Ausgeschlossene Bloecke zaehlen als fertig (sonst werden sie aus der Rechnung genommen). */
+    public boolean progressExcludedDone = true;
+    /** Ausgeschlossene Bloecke nicht automatisch platzieren. */
+    public boolean progressSkipPlacing = true;
+    /** Prozentanzeige oben links im Spiel. */
+    public boolean progressHud = false;
     /** Design: 0 Hex, 1 Sterne, 2 Regen, 3 Farbverlauf, 4 Raster, 5 Aurora, 6 Eigenes Bild, 7 Keine. */
     public int bgStyle = 0;
     /** Farbe der Hintergrund-Effekte folgt einem Regenbogen. */
@@ -109,6 +124,10 @@ public class ModConfig {
                 if (loaded.spawnerGuardCommandText == null) loaded.spawnerGuardCommandText = "/spawn";
                 // Titel ist fest und nicht mehr aenderbar
                 loaded.menuTitle = DEFAULT_TITLE;
+                if (loaded.progressExcluded == null) loaded.progressExcluded = new ArrayList<>();
+                if (loaded.selectedRecording == null) loaded.selectedRecording = "";
+                loaded.freecamSpeed = Math.max(1, Math.min(40, loaded.freecamSpeed));
+                loaded.recRepeats = Math.max(1, Math.min(99, loaded.recRepeats));
                 if (loaded.customBackground == null) loaded.customBackground = "";
                 loaded.bgStyle = Math.max(0, Math.min(7, loaded.bgStyle));
                 loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
