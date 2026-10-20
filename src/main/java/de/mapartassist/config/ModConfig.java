@@ -17,6 +17,7 @@ import java.util.Map;
 public class ModConfig {
     public static final int DEFAULT_ACCENT = 0x3FA7FF;
     public static final int DEFAULT_BG = 0x1E1E28;
+    public static final String DEFAULT_TITLE = "Kevin_Josefs Mod-Menü";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static ModConfig INSTANCE = new ModConfig();
@@ -31,7 +32,7 @@ public class ModConfig {
     /** Name des gewaehlten Capes aus der Bibliothek, leer = keins. */
     public String selectedCape = "";
     /** Titel im Menue-Kopf. Erstes Wort wird in der Akzentfarbe gezeigt. */
-    public String menuTitle = "Kevin_Josefs Mod-Menü";
+    public String menuTitle = DEFAULT_TITLE;
     /** Makros: Items (Registry-IDs, z. B. minecraft:tnt), die verkauft werden sollen. */
     public List<String> sellItems = new ArrayList<>();
     /** Pro Item: wie viele pro Verkauf (0 = ganzer Stack). */
@@ -54,6 +55,18 @@ public class ModConfig {
     public int spawnerGuardRadius = 50;
     /** true = Spawner mit Silk-Touch-Spitzhacke abbauen, false = nur sofort verlassen. */
     public boolean spawnerGuardMine = true;
+    /** Nach dem Abbau einen Befehl/Text senden (z. B. /spawn), statt (nur) den Server zu verlassen. */
+    public boolean spawnerGuardCommand = true;
+    /** Der Befehl bzw. Text. Beginnt er mit "/", wird er als Befehl gesendet, sonst als Chatnachricht. */
+    public String spawnerGuardCommandText = "/spawn";
+    /** Nach dem Befehl zusaetzlich den Server verlassen. */
+    public boolean spawnerGuardLeaveAfter = false;
+    /** Sekunden zwischen Befehl und Verlassen (damit der Teleport ankommt). */
+    public int spawnerGuardLeaveDelaySec = 3;
+    /** Menue-Einstellungen (Zahnrad oben rechts). */
+    public int bgOpacity = 97;
+    public boolean hexBackground = true;
+    public boolean menuAnimations = true;
     /** Testlauf: Makro zeigt nur an, was es tun wuerde. */
     public boolean macroDryRun = false;
     public int accentColor = DEFAULT_ACCENT; // RGB
@@ -81,6 +94,9 @@ public class ModConfig {
                 // Dieses Makro soll echte Verkaufsbefehle senden; Testlauf nicht
                 // durch einen alten gespeicherten true-Wert stillschweigend aktiv lassen.
                 loaded.macroDryRun = false;
+                if (loaded.spawnerGuardCommandText == null) loaded.spawnerGuardCommandText = "/spawn";
+                if (loaded.menuTitle == null) loaded.menuTitle = DEFAULT_TITLE;
+                loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
                 INSTANCE = loaded;
                 save();

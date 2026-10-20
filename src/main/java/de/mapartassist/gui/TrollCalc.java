@@ -12,20 +12,7 @@ public final class TrollCalc {
     private TrollCalc() {}
 
     private static final Random RND = new Random();
-    private static final String[] COMMENTS = {
-            "Mathe ist nur eine Theorie.",
-            "Garantiert falsch. Versprochen.",
-            "Fast richtig. Fast.",
-            "Der Rechner hat heute schlechte Laune.",
-            "Hab nachgedacht. Stimmt trotzdem nicht.",
-            "Probier's nochmal, wird nicht besser.",
-            "Das Ergebnis ist kreativ.",
-            "Dein Lehrer wäre stolz. Oder nicht.",
-            "Rechnen wird überbewertet.",
-    };
-
     public static final List<String> history = new ArrayList<>();
-    public static String comment = "Alle Ergebnisse sind garantiert falsch.";
 
     private static String input = "0";
     private static double acc = 0;
@@ -38,7 +25,7 @@ public final class TrollCalc {
 
     public static void press(String k) {
         switch (k) {
-            case "C" -> { input = "0"; acc = 0; op = null; fresh = true; comment = "Alles zurückgesetzt. Die Lügen auch."; }
+            case "C" -> { input = "0"; acc = 0; op = null; fresh = true; }
             case "DEL" -> {
                 if (fresh) return;
                 input = input.length() <= 1 ? "0" : input.substring(0, input.length() - 1);
@@ -76,10 +63,8 @@ public final class TrollCalc {
         double shown;
         if (Double.isNaN(real) || Double.isInfinite(real)) {
             shown = RND.nextInt(100);
-            comment = "Durch Null? Mutig. Hier ein Ergebnis:";
         } else {
             shown = troll(real);
-            comment = COMMENTS[RND.nextInt(COMMENTS.length)];
         }
         history.add(0, fmt(a).replace('.', ',') + " " + op + " " + fmt(b).replace('.', ',')
                 + " = " + fmt(shown).replace('.', ','));

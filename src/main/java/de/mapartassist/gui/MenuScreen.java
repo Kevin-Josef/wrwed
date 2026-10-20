@@ -38,26 +38,28 @@ import java.util.function.Supplier;
  */
 public class MenuScreen extends Screen {
     private enum Tab {
-        MAPART("Map Art"),
-        LOOK("Aussehen"),
-        CAPES("Capes"),
-        CREATOR("Creator"),
-        MACROS("Makros"),
-        HT1("HT1"),
-        SPAWNER("Spawner-Schutz"),
-        CALC("Taschenrechner");
+        AUCTION("Makros", "Auktions-Makro"),
+        HT1("Makros", "HT1 Combat Lock"),
+        SPAWNER("Makros", "Spawner-Schutz"),
+        CAPES("Kosmetik", "Capes"),
+        CREATOR("Kosmetik", "Cape Creator"),
+        CALC(null, "Taschenrechner"),
+        MAPART("Litematica", "Map Art"),
+        SETTINGS(null, "Einstellungen"); // nur ueber das Zahnrad oben rechts erreichbar
 
-        final String label;
-        Tab(String label) { this.label = label; }
+        final String group, label;
+        Tab(String group, String label) { this.group = group; this.label = label; }
+        String title() { return group == null ? label : group + " > " + label; }
     }
 
     /** Seitenleiste links (Navigation), rechts daneben der Inhalt. */
-    private static final int W = 620, H = 292, SB = 108, TAB_H = 24;
+    private static final int W = 636, H = 292, SB = 124, TAB_H = 21;
     private static final int S = 100, HUE_W = 14;
     private static final int ROW_H = 30, CAPE_ROWS = 5, LIST_W = 230;
 
     // bleiben beim erneuten Oeffnen erhalten
-    private static Tab activeTab = Tab.MAPART;
+    private static Tab activeTab = Tab.AUCTION;
+    private static Tab returnTab = Tab.AUCTION;
     private static boolean editAccent = true;
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
@@ -79,7 +81,8 @@ public class MenuScreen extends Screen {
 
     // Farbwaehler
     private float hue, sat, val;
-    private TextFieldWidget hexField;
+    private TextFieldWidget hexField, cmdField, titleField;
+    private final List<TextFieldWidget> fields = new ArrayList<>();
     private boolean suppressHex = false;
 
     public MenuScreen(Screen parent) {
@@ -176,9 +179,10 @@ public class MenuScreen extends Screen {
 
     private class TabBtn extends Control {
         final Tab tab;
+        final int indent;
 
-        TabBtn(int x, int y, int w, int h, Tab tab) {
-            this.x = x; this.y = y; this.w = w; this.h = h; this.tab = tab;
+        TabBtn(int x, int y, int w, int h, Tab tab, int indent) {
+            this.x = x; this.y = y; this.w = w; this.h = h; this.tab = tab; this.indent = indent;
         }
 
         @Override
@@ -188,7 +192,7 @@ public class MenuScreen extends Screen {
             if (on) ctx.fill(x, y, x + w, y + h, alpha(Theme.accent(), 0.18f));
             else if (hover > 0.02f) ctx.fill(x, y, x + w, y + h, alpha(0xFFFFFF, 0.08f * hover));
             int col = on ? 0xFFFFFFFF : mix(0xFF9A9AA8, 0xFFFFFFFF, hover);
-            text(ctx, tab.label, x + 10 + Math.round(hover * 2), y + (h - 8) / 2, col);
+            text(ctx, tab.label, x + indent + Math.round(hover * 2), y + (h - 8) / 2, col);
         }
 
         @Override
@@ -198,6 +202,87 @@ public class MenuScreen extends Screen {
                 tabChangeAt = time();
                 clearAndInit();
             }
+        }
+    }
+
+    /** Ueberschrift einer Gruppe in der Seitenleiste (nicht klickbar). */
+    private class Header extends Control {
+        final String label;
+
+        Header(int x, int y, int w, String label) {
+            this.x = x; this.y = y; this.w = w; this.h = 14; this.label = label;
+        }
+
+        @Override
+        boolean contains(int mx, int my) { return false; }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            String l = label.toUpperCase(java.util.Locale.ROOT);
+            text(ctx, l, x + 6, y + 3, alpha(Theme.accent(), 0.85f));
+            int lx = x + 12 + textRenderer.getWidth(l);
+            if (lx < x + w - 6) ctx.fill(lx, y + 7, x + w - 6, y + 8, alpha(0xFFFFFF, 0.12f));
+        }
+    }
+
+    /** Zahnrad oben rechts: Menue-Einstellungen (Farben, Titel, Animationen ...). */
+    private class GearBtn extends Control {
+        GearBtn(int x, int y) { this.x = x; this.y = y; this.w = 18; this.h = 18; }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            boolean on = activeTab == Tab.SETTINGS;
+            int acc = Theme.accent();
+            ctx.fill(x, y, x + w, y + h, on ? alpha(acc, 0.35f) : alpha(0xFFFFFF, 0.06f + 0.10f * hover));
+            if (on) ctx.fill(x, y + h - 2, x + w, y + h, acc);
+            int lc = on || hover > 0.4f ? 0xFFFFFFFF : 0xFFAAAAB6;
+            int[] ky = {y + 4, y + 8, y + 12};
+            int[] kx = {x + 11, x + 5, x + 9};
+            for (int i = 0; i < 3; i++) {
+                ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
+                ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, on ? 0xFFFFFFFF : acc);
+            }
+            if (hover > 0.5f) {
+                String t = "Einstellungen";
+                text(ctx, t, x - 6 - textRenderer.getWidth(t), y + 5, 0xFF9A9AA8);
+            }
+        }
+
+        @Override
+        void press(int mx, int my) {
+            if (activeTab == Tab.SETTINGS) {
+                activeTab = returnTab;
+            } else {
+                returnTab = activeTab;
+                activeTab = Tab.SETTINGS;
+            }
+            tabChangeAt = time();
+            clearAndInit();
+        }
+    }
+
+    /** Farb-Vorgabe zum Anklicken. */
+    private class Swatch extends Control {
+        final int rgb;
+
+        Swatch(int x, int y, int w, int h, int rgb) {
+            this.x = x; this.y = y; this.w = w; this.h = h; this.rgb = rgb;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            ctx.fill(x, y, x + w, y + h, 0xFF000000 | rgb);
+            boolean cur = (editedColor() & 0xFFFFFF) == rgb;
+            if (cur) outline(ctx, x - 1, y - 1, w + 2, h + 2, 0xFFFFFFFF);
+            else if (hover > 0.3f) outline(ctx, x - 1, y - 1, w + 2, h + 2, alpha(0xFFFFFF, 0.6f));
+        }
+
+        @Override
+        void press(int mx, int my) {
+            setEditedColor(rgb);
+            clearAndInit();
         }
     }
 
@@ -426,23 +511,48 @@ public class MenuScreen extends Screen {
         controls.clear();
         active = null;
         hexField = null;
+        cmdField = null;
+        titleField = null;
+        fields.clear();
 
-        Tab[] tabs = Tab.values();
-        for (int i = 0; i < tabs.length; i++) {
-            controls.add(new TabBtn(left + 4, top + 50 + i * TAB_H, SB - 8, TAB_H - 2, tabs[i]));
-        }
+        int ny = top + 48;
+        ny = addNavGroup("Makros", ny, Tab.AUCTION, Tab.HT1, Tab.SPAWNER);
+        ny = addNavGroup("Kosmetik", ny, Tab.CAPES, Tab.CREATOR);
+        ny = addNavGroup(null, ny, Tab.CALC);
+        addNavGroup("Litematica", ny, Tab.MAPART);
+
+        controls.add(new GearBtn(left + W - 28, top + 12));
         controls.add(new Btn(left + W - 96, top + H - 30, 80, 20, () -> "Fertig", this::close));
 
         switch (activeTab) {
             case MAPART -> buildMapArt();
-            case LOOK -> buildLook();
+            case SETTINGS -> buildSettings();
             case CAPES -> buildCapes();
             case CREATOR -> buildCreator();
-            case MACROS -> buildMacros();
+            case AUCTION -> buildMacros();
             case HT1 -> buildHt1();
             case SPAWNER -> buildSpawner();
             case CALC -> buildCalc();
         }
+    }
+
+    /** Gruppe mit Ueberschrift (oder einzelner Eintrag ohne Gruppe) in die Seitenleiste setzen; liefert das naechste y. */
+    private int addNavGroup(String title, int y, Tab... tabs) {
+        if (title != null) {
+            controls.add(new Header(left + 4, y, SB - 8, title));
+            y += 15;
+        }
+        for (Tab t : tabs) {
+            controls.add(new TabBtn(left + 4, y, SB - 8, TAB_H - 2, t, title == null ? 8 : 16));
+            y += TAB_H;
+        }
+        return y + 4;
+    }
+
+    private TextFieldWidget addField(TextFieldWidget f) {
+        fields.add(f);
+        addSelectableChild(f);
+        return f;
     }
 
     private static final int COL = 214, COL2 = 234;
@@ -460,20 +570,28 @@ public class MenuScreen extends Screen {
                 () -> Math.max(1, Math.min(4, cfg.maxPerTick)), v -> cfg.maxPerTick = v));
     }
 
-    private void buildLook() {
-        controls.add(new Btn(cx, cy, 150, 20, () -> "Akzentfarbe", () -> { editAccent = true; clearAndInit(); })
+    private static final int[] ACCENT_PRESETS = {
+            0x3FA7FF, 0x34D399, 0xF87171, 0xA78BFA, 0xFBBF24, 0xF472B6, 0x22D3EE, 0xFB923C};
+    private static final int[] BG_PRESETS = {
+            0x1E1E28, 0x14141B, 0x0F1A24, 0x1A1426, 0x14231B, 0x2A1616, 0x262626, 0x0B0B0B};
+    private static final int SET_L = 250, SET_GAP = 10;
+
+    private void buildSettings() {
+        ModConfig cfg = ModConfig.get();
+        int lx = cx;
+        controls.add(new Btn(lx + 10, cy + 22, 112, 18, () -> "Akzentfarbe", () -> { editAccent = true; clearAndInit(); })
                 .selectedIf(() -> editAccent));
-        controls.add(new Btn(cx + 154, cy, 150, 20, () -> "Hintergrund", () -> { editAccent = false; clearAndInit(); })
+        controls.add(new Btn(lx + 126, cy + 22, 112, 18, () -> "Hintergrund", () -> { editAccent = false; clearAndInit(); })
                 .selectedIf(() -> !editAccent));
 
         int rgb = editedColor();
         float[] hsv = rgbToHsv(rgb);
         hue = hsv[0]; sat = hsv[1]; val = hsv[2];
 
-        controls.add(new PickerControl(cx + 4, cy + 34));
+        controls.add(new PickerControl(lx + 14, cy + 48));
 
-        int rx = cx + S + HUE_W + 36;
-        hexField = new TextFieldWidget(textRenderer, rx, cy + 66, 74, 18, Text.literal("Hex"));
+        int rx = lx + 14 + S + 10 + HUE_W + 16;
+        hexField = addField(new TextFieldWidget(textRenderer, rx, cy + 50, 74, 18, Text.literal("Hex")));
         hexField.setMaxLength(6);
         hexField.setText(String.format("%06X", rgb));
         hexField.setChangedListener(t -> {
@@ -486,10 +604,34 @@ public class MenuScreen extends Screen {
             } catch (NumberFormatException ignored) {
             }
         });
-        addDrawableChild(hexField);
-
-        controls.add(new Btn(rx, cy + 94, 150, 20, () -> "Zurücksetzen", () -> {
+        controls.add(new Btn(rx, cy + 76, lx + SET_L - 10 - rx, 18, () -> "Zurücksetzen", () -> {
             setEditedColor(editAccent ? ModConfig.DEFAULT_ACCENT : ModConfig.DEFAULT_BG);
+            clearAndInit();
+        }));
+
+        int[] presets = editAccent ? ACCENT_PRESETS : BG_PRESETS;
+        for (int i = 0; i < presets.length; i++) {
+            controls.add(new Swatch(lx + 14 + i * 26, cy + 158, 22, 14, presets[i]));
+        }
+
+        // rechte Karte: Menue
+        int px = cx + SET_L + SET_GAP, pw = cw - SET_L - SET_GAP;
+        titleField = addField(new TextFieldWidget(textRenderer, px + 10, cy + 33, pw - 20, 18, Text.literal("Titel")));
+        titleField.setMaxLength(24);
+        titleField.setText(cfg.menuTitle == null ? "" : cfg.menuTitle);
+        titleField.setChangedListener(t -> cfg.menuTitle = t);
+
+        controls.add(new Sld(px + 12, cy + 62, pw - 24, "Hintergrund-Deckkraft", " %", 40, 100,
+                () -> cfg.bgOpacity, v -> cfg.bgOpacity = v));
+        controls.add(new Tog(px + 6, cy + 96, pw - 12, "Hex-Animation", () -> cfg.hexBackground, v -> cfg.hexBackground = v));
+        controls.add(new Tog(px + 6, cy + 120, pw - 12, "Übergangs-Animationen", () -> cfg.menuAnimations, v -> cfg.menuAnimations = v));
+        controls.add(new Btn(px + 10, cy + 152, pw - 20, 20, () -> "Alles zurücksetzen", () -> {
+            cfg.accentColor = ModConfig.DEFAULT_ACCENT;
+            cfg.bgColor = ModConfig.DEFAULT_BG;
+            cfg.menuTitle = ModConfig.DEFAULT_TITLE;
+            cfg.bgOpacity = 97;
+            cfg.hexBackground = true;
+            cfg.menuAnimations = true;
             clearAndInit();
         }));
     }
@@ -548,6 +690,18 @@ public class MenuScreen extends Screen {
                 () -> cfg.spawnerGuardMine, v -> { cfg.spawnerGuardMine = v; ModConfig.save(); }));
         controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Erkennungs-Radius", " Blöcke", 10, 100,
                 () -> Math.max(10, Math.min(100, cfg.spawnerGuardRadius)), v -> cfg.spawnerGuardRadius = v));
+
+        int rx = cx + COL2;
+        controls.add(new Tog(rx + 6, cy + 26, COL - 12, "Befehl ausführen",
+                () -> cfg.spawnerGuardCommand, v -> { cfg.spawnerGuardCommand = v; ModConfig.save(); }));
+        cmdField = addField(new TextFieldWidget(textRenderer, rx + 10, cy + 68, COL - 20, 18, Text.literal("Befehl")));
+        cmdField.setMaxLength(100);
+        cmdField.setText(cfg.spawnerGuardCommandText == null ? "" : cfg.spawnerGuardCommandText);
+        cmdField.setChangedListener(t -> cfg.spawnerGuardCommandText = t);
+        controls.add(new Tog(rx + 6, cy + 94, COL - 12, "Danach Server verlassen",
+                () -> cfg.spawnerGuardLeaveAfter, v -> { cfg.spawnerGuardLeaveAfter = v; ModConfig.save(); }));
+        controls.add(new Sld(rx + 12, cy + 124, COL - 24, "Verlassen nach", " s", 1, 15,
+                () -> Math.max(1, Math.min(15, cfg.spawnerGuardLeaveDelaySec)), v -> cfg.spawnerGuardLeaveDelaySec = v));
     }
 
     private static final String[][] CALC_KEYS = {
@@ -714,15 +868,16 @@ public class MenuScreen extends Screen {
     @Override
     public void renderBackground(DrawContext ctx, int mouseX, int mouseY, float delta) {
         super.renderBackground(ctx, mouseX, mouseY, delta);
-        float t = Math.min(1f, time() / 0.3f);
+        ModConfig cfg = ModConfig.get();
+        float t = cfg.menuAnimations ? Math.min(1f, time() / 0.3f) : 1f;
         float ease = 1f - (1f - t) * (1f - t) * (1f - t);
         int acc = Theme.accent();
 
         ctx.fill(0, 0, width, height, alpha(0x000000, 0.40f * ease));
 
         int bg = Theme.bg();
-        ctx.fillGradient(left, top, left + W, top + H, alpha(mix(bg, 0xFFFFFFFF, 0.07f), 0.97f), alpha(bg, 0.97f));
-        drawHexBackground(ctx, time());
+        ctx.fillGradient(left, top, left + W, top + H, alpha(mix(bg, 0xFFFFFFFF, 0.07f), cfg.bgOpacity / 100f), alpha(bg, cfg.bgOpacity / 100f));
+        if (cfg.hexBackground) drawHexBackground(ctx, time());
         // Seitenleiste
         ctx.fill(left, top, left + SB, top + H, 0x55000000);
         ctx.fill(left + SB, top, left + SB + 1, top + H, alpha(acc, 0.35f));
@@ -744,7 +899,7 @@ public class MenuScreen extends Screen {
         ctx.fill(left + 8, top + 41, left + SB - 8, top + 42, alpha(0xFFFFFF, 0.12f));
 
         // Ueberschrift des aktiven Bereichs
-        text(ctx, activeTab.label, left + SB + 16, top + 17, 0xFFFFFFFF);
+        text(ctx, activeTab.title(), left + SB + 16, top + 17, 0xFFFFFFFF);
     }
 
     /** Dezent animiertes Sechseck-Muster: driftet langsam, pulsiert, ein Lichtfleck wandert darueber. */
@@ -819,6 +974,7 @@ public class MenuScreen extends Screen {
         hoverCape = null;
         renderBackdrop(ctx);
         List<Control> snapshot = new ArrayList<>(controls);
+        for (TextFieldWidget f : fields) f.render(ctx, mouseX, mouseY, delta); // ueber den Karten
         for (Control c : snapshot) c.draw(ctx, mouseX, mouseY);
         renderOverlay(ctx);
 
@@ -832,7 +988,7 @@ public class MenuScreen extends Screen {
         }
 
         // Ueberblenden beim Reiterwechsel
-        float p = Math.min(1f, (time() - tabChangeAt) / 0.22f);
+        float p = ModConfig.get().menuAnimations ? Math.min(1f, (time() - tabChangeAt) / 0.22f) : 1f;
         if (p < 1f) {
             ctx.fill(left + SB + 2, top + 44, left + W - 1, top + H - 39, alpha(Theme.bg(), 0.85f * (1f - p)));
         }
@@ -854,7 +1010,10 @@ public class MenuScreen extends Screen {
                 card(ctx, cx, cy - 4, COL, 150, "Platzieren");
                 card(ctx, cx + COL2, cy - 4, COL, 150, "Experimentell");
             }
-            case LOOK -> { }
+            case SETTINGS -> {
+                card(ctx, cx, cy - 4, SET_L, 186, "Farben");
+                card(ctx, cx + SET_L + SET_GAP, cy - 4, cw - SET_L - SET_GAP, 186, "Menü");
+            }
             case CAPES -> {
                 int rx = cx + LIST_W + 10, rw = cx + cw - rx;
                 card(ctx, rx, cy, rw, 126, null);
@@ -868,14 +1027,14 @@ public class MenuScreen extends Screen {
                 card(ctx, cx + COL2, cy - 4, COL, 150, "So funktioniert es");
             }
             case SPAWNER -> {
-                card(ctx, cx, cy - 4, COL, 150, "Spawner-AFK-Schutz");
-                card(ctx, cx + COL2, cy - 4, COL, 170, "So funktioniert es");
+                card(ctx, cx, cy - 4, COL, 184, "Spawner-AFK-Schutz");
+                card(ctx, cx + COL2, cy - 4, COL, 184, "Danach");
             }
             case CALC -> {
                 card(ctx, cx, cy - 4, 222, 190, null);
-                card(ctx, cx + 232, cy - 4, cw - 232, 190, "Verlauf (alles falsch)");
+                card(ctx, cx + 232, cy - 4, cw - 232, 190, "Verlauf");
             }
-            case MACROS -> {
+            case AUCTION -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Auktion: Verkaufsliste");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Einstellungen");
             }
@@ -890,10 +1049,10 @@ public class MenuScreen extends Screen {
                 text(ctx, "Bei Rucklern: ausgeschaltet lassen.", cx + COL2 + 12, cy + 113, 0xFF777783);
                 drawStatus(ctx);
             }
-            case LOOK -> renderLook(ctx);
+            case SETTINGS -> renderSettings(ctx);
             case CAPES -> renderCapes(ctx);
             case CREATOR -> renderCreator(ctx);
-            case MACROS -> renderMacros(ctx);
+            case AUCTION -> renderMacros(ctx);
             case HT1 -> renderHt1(ctx);
             case SPAWNER -> renderSpawner(ctx);
             case CALC -> renderCalc(ctx);
@@ -902,21 +1061,26 @@ public class MenuScreen extends Screen {
 
     private void renderSpawner(DrawContext ctx) {
         ModConfig cfg = ModConfig.get();
-        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 122,
+        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 120,
                 cfg.spawnerGuard ? 0xFF66DD77 : 0xFFDD6666);
         boolean pick = client != null && client.player != null && SpawnerGuard.hasSilkPickaxe(client.player);
         text(ctx, pick ? "Silk-Touch-Spitzhacke: gefunden" : "Silk-Touch-Spitzhacke: FEHLT",
-                cx + 12, cy + 136, pick ? 0xFF66DD77 : 0xFFFFD866);
+                cx + 12, cy + 131, pick ? 0xFF66DD77 : 0xFFFFD866);
+        text(ctx, "Ablauf: Spieler erkannt, Spawner", cx + 12, cy + 146, 0xFF777783);
+        text(ctx, "abbauen, Befehl, ggf. verlassen.", cx + 12, cy + 157, 0xFF777783);
+        text(ctx, "Spawner in 4 Blöcken. Taste L = an/aus.", cx + 12, cy + 168, 0xFF777783);
+
         int rx = cx + COL2 + 12;
-        text(ctx, "Kommt ein anderer Spieler in den", rx, cy + 28, 0xFFCCCCCC);
-        text(ctx, "Radius, baut die Mod alle Spawner in", rx, cy + 41, 0xFFCCCCCC);
-        text(ctx, "Reichweite ab und verlässt den Server.", rx, cy + 54, 0xFFCCCCCC);
-        text(ctx, "Silk-Touch-Spitzhacke ins Inventar", rx, cy + 75, 0xFF777783);
-        text(ctx, "legen. Ohne sie: sofort verlassen.", rx, cy + 88, 0xFF777783);
-        text(ctx, "Spawner müssen in Reichweite (4 Blöcke)", rx, cy + 109, 0xFF777783);
-        text(ctx, "stehen. Taste L schaltet ein/aus.", rx, cy + 122, 0xFF777783);
-        text(ctx, "Pro Spawner: schleichen, abbauen, 1 s", rx, cy + 135, 0xFF777783);
-        text(ctx, "warten, nochmal abbauen (Bestätigung).", rx, cy + 148, 0xFF777783);
+        text(ctx, "Befehl oder Text (z. B. /spawn):", rx, cy + 56, 0xFFCCCCCC);
+        if (!cfg.spawnerGuardCommand) {
+            text(ctx, "Befehl aus: es wird immer verlassen.", rx, cy + 152, 0xFFFFD866);
+        } else if (!cfg.spawnerGuardLeaveAfter) {
+            text(ctx, "Nach dem Befehl bleibst du online.", rx, cy + 152, 0xFF777783);
+            text(ctx, "Der Schutz schaltet sich dann aus.", rx, cy + 163, 0xFF777783);
+        } else {
+            text(ctx, "Nach dem Befehl wartest du kurz,", rx, cy + 152, 0xFF777783);
+            text(ctx, "dann wird der Server verlassen.", rx, cy + 163, 0xFF777783);
+        }
         text(ctx, SpawnerGuard.status, cx, top + H - 24, SpawnerGuard.active() ? 0xFFFF6666 : 0xFFFFD866);
     }
 
@@ -936,7 +1100,6 @@ public class MenuScreen extends Screen {
             text(ctx, h, rx, y, 0xFFCCCCCC);
             y += 13;
         }
-        text(ctx, TrollCalc.comment, rx, cy + 168, 0xFFFFD866);
     }
 
     private void renderHt1(DrawContext ctx) {
@@ -977,26 +1140,17 @@ public class MenuScreen extends Screen {
         text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
     }
 
-    private void renderLook(DrawContext ctx) {
-        int rx = cx + S + HUE_W + 36;
-        text(ctx, "Vorschau", rx, cy + 34, 0xFFCCCCCC);
-        ctx.fill(rx - 1, cy + 45, rx + 151, cy + 63, 0xFF000000);
-        ctx.fill(rx, cy + 46, rx + 150, cy + 62, 0xFF000000 | editedColor());
-        text(ctx, "#", rx - 9, cy + 71, 0xFFCCCCCC);
+    private void renderSettings(DrawContext ctx) {
+        int rx = cx + 14 + S + 10 + HUE_W + 16;
+        text(ctx, "#", rx - 9, cy + 55, 0xFFCCCCCC);
+        text(ctx, "Vorschau", rx, cy + 100, 0xFFCCCCCC);
+        int sw = cx + SET_L - 10 - rx;
+        ctx.fill(rx - 1, cy + 111, rx + sw + 1, cy + 129, 0xFF000000);
+        ctx.fill(rx, cy + 112, rx + sw, cy + 128, 0xFF000000 | editedColor());
+        text(ctx, "Voreinstellungen", cx + 14, cy + 150, 0xFF777783);
 
-        // Mini-Beispiel im aktuellen Farbschema
-        int mx = rx + 170, my = cy + 34, mw = cx + cw - mx, mh = 80;
-        ctx.fill(mx, my, mx + mw, my + mh, 0xFF000000 | ModConfig.get().bgColor);
-        outline(ctx, mx, my, mw, mh, alpha(Theme.accent(), 0.7f));
-        ctx.fill(mx, my, mx + mw, my + 2, Theme.accent());
-        text(ctx, "Beispiel", mx + 8, my + 10, 0xFFFFFFFF);
-        ctx.fill(mx + 8, my + 28, mx + mw - 8, my + 46, alpha(Theme.accent(), 0.35f));
-        ctx.fill(mx + 8, my + 44, mx + mw - 8, my + 46, Theme.accent());
-        textCentered(ctx, "Knopf", mx + mw / 2, my + 33, 0xFFFFFFFF);
-        ctx.fill(mx + 8, my + 56, mx + 36, my + 68, mix(0xFF3A3A48, Theme.accent() | 0xFF000000, 1f));
-        ctx.fill(mx + 22, my + 58, mx + 34, my + 66, 0xFFFFFFFF);
-
-        text(ctx, "Farbe im Feld ziehen, rechts den Farbton wählen.", cx, cy + 142, 0xFF777783);
+        int px = cx + SET_L + SET_GAP;
+        text(ctx, "Menü-Titel (Sidebar oben links)", px + 10, cy + 22, 0xFF999999);
     }
 
     private void renderCapes(DrawContext ctx) {

@@ -37,7 +37,7 @@ import java.util.Set;
 public final class SpawnerGuard {
     private SpawnerGuard() {}
 
-    private enum Phase { IDLE, MINING, COLLECTING, LEAVING }
+    private enum Phase { IDLE, MINING, COLLECTING, LEAVING, AFTER_CMD }
 
     /** Reichweite zum Abbauen (Abstand Auge -> Blockmitte). Bewusst etwas unter dem Server-Limit. */
     private static final double REACH = 4.4;
@@ -185,7 +185,48 @@ public final class SpawnerGuard {
             case MINING -> mine(client, p);
             case COLLECTING -> collect(client, p);
             case LEAVING -> {
-                if (--leaveTicks <= 0) leave(client);
+                if (--leaveTicks <= 0) finish(client);
+            }
+            case AFTER_CMD -> {
+                leaveTicks--;
+                status = "Befehl gesendet, verlasse Server in " + (int) Math.ceil(Math.max(0, leaveTicks) / 20.0) + " s ...";
+                if (leaveTicks <= 0) leave(client);
+            }
+        }
+    }
+
+    /**
+     * Abschluss nach dem Abbau (oder wenn nichts abzubauen war): erst den eingestellten Befehl senden
+     * (z. B. /spawn), danach je nach Einstellung den Server verlassen oder online bleiben.
+     * Ohne gueltigen Befehl wird wie frueher immer verlassen.
+     */
+    private static void finish(MinecraftClient client) {
+        ModConfig cfg = ModConfig.get();
+        String cmd = cfg.spawnerGuardCommand && cfg.spawnerGuardCommandText != null
+                ? cfg.spawnerGuardCommandText.trim() : "";
+        if (cmd.isEmpty() || client.getNetworkHandler() == null) {
+            leave(client);
+            return;
+        }
+        if (cmd.startsWith("/")) {
+            String c = cmd.substring(1).trim();
+            if (c.isEmpty()) { leave(client); return; }
+            client.getNetworkHandler().sendChatCommand(c);
+        } else {
+            client.getNetworkHandler().sendChatMessage(cmd);
+        }
+        if (cfg.spawnerGuardLeaveAfter) {
+            phase = Phase.AFTER_CMD;
+            leaveTicks = Math.max(0, cfg.spawnerGuardLeaveDelaySec) * 20;
+            status = "Befehl gesendet: " + cmd;
+        } else {
+            phase = Phase.IDLE;
+            cfg.spawnerGuard = false; // sonst wuerde der Spieler im Radius sofort wieder ausloesen
+            ModConfig.save();
+            status = "Befehl gesendet: " + cmd + " (" + mined + " Spawner abgebaut). Schutz ausgeschaltet, Taste L = wieder an.";
+            if (client.player != null) {
+                client.player.sendMessage(Text.literal("Spawner-Schutz: " + cmd + " ausgeführt, Schutz ausgeschaltet.")
+                        .formatted(Formatting.YELLOW), false);
             }
         }
     }
@@ -357,6 +398,7 @@ public final class SpawnerGuard {
     }
 
     private static void leave(MinecraftClient client) {
+        if (client.getNetworkHandler() == null) { phase = Phase.IDLE; return; }
         status = "Zuletzt verlassen: " + reason + ", " + mined + " Spawner abgebaut.";
         phase = Phase.IDLE;
         ModConfig.get().spawnerGuard = false; // nach dem Wiederbeitritt nicht sofort erneut ausloesen
