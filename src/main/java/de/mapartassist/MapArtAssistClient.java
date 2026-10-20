@@ -1,6 +1,7 @@
 package de.mapartassist;
 
 import de.mapartassist.combat.CombatLock;
+import de.mapartassist.chat.ChatCoordinates;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
 import de.mapartassist.guard.SpawnerGuard;
@@ -75,6 +76,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ModConfig.load();
+        ChatCoordinates.init();
         AuctionMacro.init();
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY));
