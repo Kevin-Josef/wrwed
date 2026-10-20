@@ -614,7 +614,6 @@ public class MenuScreen extends Screen {
         int bx = left + W / 2 - 110;
         pwField = addField(new TextFieldWidget(textRenderer, bx, cy + 52, 220, 20, Text.literal("Passwort")));
         pwField.setMaxLength(16);
-        pwField.setRenderTextProvider((t, i) -> OrderedText.styledForwardsVisitedString("*".repeat(t.length()), Style.EMPTY));
         pwField.setChangedListener(t -> {
             pwError = false;
             if (t.equals(ADMIN_PASSWORD)) pendingUnlock = true;
@@ -1363,6 +1362,16 @@ public class MenuScreen extends Screen {
     private void renderAdminLogin(DrawContext ctx) {
         int mx = left + W / 2;
         textCentered(ctx, "Bitte Passwort eingeben", mx, cy + 30, 0xFFCCCCCC);
+        if (pwField != null) {
+            // Eingabe verdecken: Textfeld-Inhalt mit Sternchen uebermalen
+            int fx = pwField.getX(), fy = pwField.getY(), fw = pwField.getWidth(), fh = pwField.getHeight();
+            ctx.fill(fx + 1, fy + 1, fx + fw - 1, fy + fh - 1, 0xFF000000);
+            String stars = "*".repeat(pwField.getText().length());
+            text(ctx, stars, fx + 4, fy + (fh - 8) / 2, 0xFFFFFFFF);
+            if (pwField.isFocused() && (int) (time() * 2) % 2 == 0) {
+                text(ctx, "_", fx + 4 + textRenderer.getWidth(stars), fy + (fh - 8) / 2, 0xFFFFFFFF);
+            }
+        }
         if (pwError) {
             float p = Math.min(1f, (time() - pwErrorAt) / 0.4f);
             int shake = Math.round((float) Math.sin(p * 30f) * 3f * (1f - p));
