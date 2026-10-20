@@ -51,9 +51,11 @@ public final class SpawnerGuard {
     /** Maximale Dauer eines einzelnen Abbauvorgangs (8 s). */
     private static final int BREAK_MAX_TICKS = 160;
     /** Mindestwartezeit nach dem letzten Abbau, damit Drops erscheinen (1 s). */
-    private static final int COLLECT_MIN_TICKS = 20;
+    private static final int COLLECT_MIN_TICKS = 6;
     /** Maximale Wartezeit auf das Einsammeln (12 s). */
-    private static final int COLLECT_MAX_TICKS = 240;
+    private static final int COLLECT_MAX_TICKS = 100;
+    /** Nur Spawner-Drops in diesem Umkreis zaehlen (Spawner stehen max. 3x3 Bloecke um den Spieler). */
+    private static final double COLLECT_RADIUS = 3.5;
     private static int breakTicks;
     private static int collectTicks;
 
@@ -65,7 +67,7 @@ public final class SpawnerGuard {
     private static boolean sneakForced;
     private static final Set<BlockPos> skipped = new HashSet<>();
     /** Ticks zwischen letztem Abbau und Verlassen, damit das Server-Paket sicher ankommt. */
-    private static final int LEAVE_DELAY_TICKS = 10;
+    private static final int LEAVE_DELAY_TICKS = 2;
 
     private static Phase phase = Phase.IDLE;
     private static long startedAt;
@@ -329,7 +331,7 @@ public final class SpawnerGuard {
         collectTicks++;
         holdSneak(client); // schleichend laufen: kein Absturz vom Rand
         List<ItemEntity> items = client.world.getEntitiesByClass(ItemEntity.class,
-                p.getBoundingBox().expand(12), e -> e.getStack().isOf(Items.SPAWNER));
+                p.getBoundingBox().expand(COLLECT_RADIUS), e -> e.getStack().isOf(Items.SPAWNER) && e.distanceTo(p) <= COLLECT_RADIUS);
         if (collectTicks >= COLLECT_MIN_TICKS && items.isEmpty()) {
             status = mined + " Spawner abgebaut und eingesammelt, verlasse Server.";
             startLeaving(client);

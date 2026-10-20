@@ -344,26 +344,13 @@ public final class AuctionMacro {
                     if (sentSell && cur != null) {
                         sentSell = false;
                         int now = count(p, cur.item());
-                        // Verkauft, wenn die Menge zwischenzeitlich gesunken ist. Steht man in gedropptem
-                        // Zeug, wird das Item sofort wieder aufgesammelt: dann ist now == vorher, obwohl
-                        // der Verkauf geklappt hat. Deshalb zaehlt das Minimum waehrend des Wartens.
+                        // Kein Abbruch bei unveraenderter Menge: Wer in gedropptem Zeug steht, sammelt
+                        // sofort wieder auf, die Menge bleibt dann oft lange gleich. Entscheidend ist
+                        // nur, ob (wieder) ein voller Stack in der Hand/im Inventar liegt.
                         boolean sold = minCountSeen < countBeforeSell || now < countBeforeSell;
-                        if (sold) {
-                            say("Nach /ah sell: verkauft/eingestellt (Inventar zwischenzeitlich "
-                                    + minCountSeen + ", jetzt " + now + ").", Formatting.GREEN);
-                            failedSells = 0;
-                        } else {
-                            failedSells++;
-                            say("Nach /ah sell: Menge unverändert (" + now + ") [" + failedSells + "/10]",
-                                    Formatting.YELLOW);
-                            // Es koennte sofort wieder aufgesammelt worden sein, daher erst nach
-                            // 10 Versuchen in Folge stoppen (Endlosschleife vermeiden).
-                            if (failedSells >= 10) {
-                                finish("Verkauf funktioniert nicht: Menge blieb 10x unverändert. "
-                                        + "Letzte Chatzeile: " + lastServerMsg, Formatting.RED);
-                                return;
-                            }
-                        }
+                        say(sold ? "Nach /ah sell: verkauft/eingestellt."
+                                : "Nach /ah sell: Menge gleich (vermutlich wieder aufgesammelt).",
+                                sold ? Formatting.GREEN : Formatting.YELLOW);
                         if (cfg.macroRepeat && hasFullStack(p, cur.item())) {
                             // Die Inventarmenge ist kein sicherer Beleg dafuer, dass der Server
                             // den Verkaufsbefehl abgelehnt hat. Bei aktivierter Wiederholung das
