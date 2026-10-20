@@ -38,6 +38,8 @@ import java.util.function.Supplier;
  */
 public class MenuScreen extends Screen {
     private enum Tab {
+        HOME(null, "Startseite"),
+        ADMIN(null, "Admin-Panel"),
         AUCTION("Makros", "Auktions-Makro"),
         HT1("Makros", "HT1 Combat Lock"),
         SPAWNER("Makros", "Spawner-Schutz"),
@@ -58,8 +60,9 @@ public class MenuScreen extends Screen {
     private static final int ROW_H = 30, CAPE_ROWS = 5, LIST_W = 230;
 
     // bleiben beim erneuten Oeffnen erhalten
-    private static Tab activeTab = Tab.AUCTION;
-    private static Tab returnTab = Tab.AUCTION;
+    private static Tab activeTab = Tab.HOME;
+    private static Tab returnTab = Tab.HOME;
+    private static boolean adminUnlocked = false;
     private static boolean editAccent = true;
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
@@ -81,7 +84,7 @@ public class MenuScreen extends Screen {
 
     // Farbwaehler
     private float hue, sat, val;
-    private TextFieldWidget hexField, cmdField, titleField;
+    private TextFieldWidget hexField, cmdField, titleField, adminPasswordField;
     private final List<TextFieldWidget> fields = new ArrayList<>();
     private boolean suppressHex = false;
 
@@ -513,18 +516,24 @@ public class MenuScreen extends Screen {
         hexField = null;
         cmdField = null;
         titleField = null;
+        adminPasswordField = null;
         fields.clear();
 
         int ny = top + 48;
+        controls.add(new TabBtn(left + 4, ny, SB - 8, TAB_H - 2, Tab.HOME, 8));
+        ny += TAB_H + 4;
         ny = addNavGroup("Makros", ny, Tab.AUCTION, Tab.HT1, Tab.SPAWNER);
         ny = addNavGroup("Kosmetik", ny, Tab.CAPES, Tab.CREATOR);
         ny = addNavGroup(null, ny, Tab.CALC);
         addNavGroup("Litematica", ny, Tab.MAPART);
+        controls.add(new TabBtn(left + 4, top + H - 62, SB - 8, TAB_H - 2, Tab.ADMIN, 8));
 
         controls.add(new GearBtn(left + W - 28, top + 12));
         controls.add(new Btn(left + W - 96, top + H - 30, 80, 20, () -> "Fertig", this::close));
 
         switch (activeTab) {
+            case HOME -> buildHome();
+            case ADMIN -> buildAdmin();
             case MAPART -> buildMapArt();
             case SETTINGS -> buildSettings();
             case CAPES -> buildCapes();
@@ -556,6 +565,40 @@ public class MenuScreen extends Screen {
     }
 
     private static final int COL = 214, COL2 = 234;
+
+    private void buildHome() {
+        controls.add(new Header(cx + 6, cy + 18, cw - 18, "Willkommen"));
+        controls.add(new Btn(cx + 8, cy + 48, 190, 22, () -> "Auktions-Makro öffnen", () -> setTab(Tab.AUCTION)));
+        controls.add(new Btn(cx + 8, cy + 78, 190, 22, () -> "Spawner-Schutz öffnen", () -> setTab(Tab.SPAWNER)));
+        controls.add(new Btn(cx + 8, cy + 108, 190, 22, () -> "Map Art öffnen", () -> setTab(Tab.MAPART)));
+        controls.add(new Btn(cx + 8, cy + 138, 190, 22, () -> "Design-Einstellungen", () -> setTab(Tab.SETTINGS)));
+    }
+
+    private void buildAdmin() {
+        controls.add(new Header(cx + 6, cy + 18, cw - 18, "Admin-Zugang"));
+        if (adminUnlocked) {
+            controls.add(new Btn(cx + 8, cy + 48, 190, 22, () -> "Design-Einstellungen öffnen", () -> setTab(Tab.SETTINGS)));
+            controls.add(new Btn(cx + 8, cy + 78, 190, 22, () -> "Admin-Zugang sperren", () -> { adminUnlocked = false; setTab(Tab.ADMIN); }));
+        } else {
+            adminPasswordField = addField(new TextFieldWidget(textRenderer, cx + 8, cy + 52, 190, 20, Text.literal("Admin-Passwort")));
+            adminPasswordField.setMaxLength(32);
+            controls.add(new Btn(cx + 8, cy + 82, 190, 22, () -> "Anmelden", () -> {
+                if (adminPasswordField != null && "676767".equals(adminPasswordField.getText())) {
+                    adminUnlocked = true;
+                    macroStatus = "Admin-Zugang freigeschaltet.";
+                } else {
+                    macroStatus = "Falsches Passwort.";
+                }
+                setTab(Tab.ADMIN);
+            }));
+            }
+    }
+
+    private void setTab(Tab tab) {
+        activeTab = tab;
+        tabChangeAt = time();
+        clearAndInit();
+    }
 
     private void buildMapArt() {
         ModConfig cfg = ModConfig.get();
@@ -616,10 +659,8 @@ public class MenuScreen extends Screen {
 
         // rechte Karte: Menue
         int px = cx + SET_L + SET_GAP, pw = cw - SET_L - SET_GAP;
-        titleField = addField(new TextFieldWidget(textRenderer, px + 10, cy + 33, pw - 20, 18, Text.literal("Titel")));
-        titleField.setMaxLength(24);
-        titleField.setText(cfg.menuTitle == null ? "" : cfg.menuTitle);
-        titleField.setChangedListener(t -> cfg.menuTitle = t);
+        // Der offizielle Mod-Name ist fest und nicht über die Design-Einstellungen änderbar.
+        cfg.menuTitle = ModConfig.DEFAULT_TITLE;
 
         controls.add(new Sld(px + 12, cy + 62, pw - 24, "Hintergrund-Deckkraft", " %", 40, 100,
                 () -> cfg.bgOpacity, v -> cfg.bgOpacity = v));
@@ -889,8 +930,8 @@ public class MenuScreen extends Screen {
         ctx.fill(left, top, left + Math.round(W * ease), top + 2, acc);
 
         // Titel in der Seitenleiste (erstes Wort in Akzentfarbe, Rest darunter)
-        String title = ModConfig.get().menuTitle == null || ModConfig.get().menuTitle.isBlank()
-                ? "Mod-Menü" : ModConfig.get().menuTitle;
+        String title = ModConfig.DEFAULT_TITLE;
+        ModConfig.get().menuTitle = ModConfig.DEFAULT_TITLE;
         int sp = title.indexOf(' ');
         String first = sp < 0 ? title : title.substring(0, sp);
         String rest = sp < 0 ? "" : title.substring(sp + 1);

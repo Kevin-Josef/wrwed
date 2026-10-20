@@ -62,7 +62,7 @@ public class ModConfig {
     /** Nach dem Befehl zusaetzlich den Server verlassen. */
     public boolean spawnerGuardLeaveAfter = false;
     /** Sekunden zwischen Befehl und Verlassen (damit der Teleport ankommt). */
-    public int spawnerGuardLeaveDelaySec = 3;
+    public int spawnerGuardLeaveDelaySec = 1;
     /** Menue-Einstellungen (Zahnrad oben rechts). */
     public int bgOpacity = 97;
     public boolean hexBackground = true;
