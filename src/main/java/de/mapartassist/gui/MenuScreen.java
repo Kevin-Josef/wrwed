@@ -15,6 +15,9 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.text.OrderedText;
+import net.minecraft.text.Style;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -39,7 +42,6 @@ import java.util.function.Supplier;
 public class MenuScreen extends Screen {
     private enum Tab {
         HOME(null, "Startseite"),
-        ADMIN(null, "Admin-Panel"),
         AUCTION("Makros", "Auktions-Makro"),
         HT1("Makros", "HT1 Combat Lock"),
         SPAWNER("Makros", "Spawner-Schutz"),
@@ -47,22 +49,25 @@ public class MenuScreen extends Screen {
         CREATOR("Kosmetik", "Cape Creator"),
         CALC(null, "Taschenrechner"),
         MAPART("Litematica", "Map Art"),
-        SETTINGS(null, "Einstellungen"); // nur ueber das Zahnrad oben rechts erreichbar
+        SETTINGS(null, "Design"),
+        ADMIN_LOGIN(null, "Admin-Panel"),
+        ADMIN(null, "Admin-Panel");
 
         final String group, label;
         Tab(String group, String label) { this.group = group; this.label = label; }
         String title() { return group == null ? label : group + " > " + label; }
     }
 
-    /** Seitenleiste links (Navigation), rechts daneben der Inhalt. */
-    private static final int W = 636, H = 292, SB = 124, TAB_H = 21;
+    // Admin-Panel: reine Oberflaechen-Sperre (steht im Klartext in der Mod, ist kein echter Schutz)
+    private static final String ADMIN_PASSWORD = "676767";
+
+    /** Fenstergroesse (ohne Seitenleiste: Startseite mit Kacheln). */
+    private static final int W = 636, H = 292;
     private static final int S = 100, HUE_W = 14;
     private static final int ROW_H = 30, CAPE_ROWS = 5, LIST_W = 230;
 
     // bleiben beim erneuten Oeffnen erhalten
     private static Tab activeTab = Tab.HOME;
-    private static Tab returnTab = Tab.HOME;
-    private static boolean adminUnlocked = false;
     private static boolean editAccent = true;
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
@@ -78,19 +83,23 @@ public class MenuScreen extends Screen {
     private final List<Control> controls = new ArrayList<>();
     private Control active = null;
     private boolean wasDown = false;
-    private float tabIndY = -1;
     private float tabChangeAt = -10f;
     private String hoverCape = null;
 
     // Farbwaehler
     private float hue, sat, val;
-    private TextFieldWidget hexField, cmdField, titleField, adminPasswordField;
+    private TextFieldWidget hexField, cmdField, titleField, pwField;
+    private boolean adminUnlocked = false;
+    private boolean pendingUnlock = false;
+    private boolean pwError = false;
+    private float pwErrorAt = -10f;
     private final List<TextFieldWidget> fields = new ArrayList<>();
     private boolean suppressHex = false;
 
     public MenuScreen(Screen parent) {
         super(Text.literal("Mod-Menü"));
         this.parent = parent;
+        activeTab = Tab.HOME; // Menue startet immer auf der Startseite
         CapeManager.scan();
         CapePreview.clear();
     }
@@ -180,89 +189,84 @@ public class MenuScreen extends Screen {
         }
     }
 
-    private class TabBtn extends Control {
+    /** Kachel auf der Startseite. */
+    private class Tile extends Control {
         final Tab tab;
-        final int indent;
 
-        TabBtn(int x, int y, int w, int h, Tab tab, int indent) {
-            this.x = x; this.y = y; this.w = w; this.h = h; this.tab = tab; this.indent = indent;
+        Tile(int x, int y, int w, int h, Tab tab) {
+            this.x = x; this.y = y; this.w = w; this.h = h; this.tab = tab;
         }
-
-        @Override
-        void draw(DrawContext ctx, int mx, int my) {
-            boolean on = tab == activeTab;
-            animateHover(mx, my, true);
-            if (on) ctx.fill(x, y, x + w, y + h, alpha(Theme.accent(), 0.18f));
-            else if (hover > 0.02f) ctx.fill(x, y, x + w, y + h, alpha(0xFFFFFF, 0.08f * hover));
-            int col = on ? 0xFFFFFFFF : mix(0xFF9A9AA8, 0xFFFFFFFF, hover);
-            text(ctx, tab.label, x + indent + Math.round(hover * 2), y + (h - 8) / 2, col);
-        }
-
-        @Override
-        void press(int mx, int my) {
-            if (activeTab != tab) {
-                activeTab = tab;
-                tabChangeAt = time();
-                clearAndInit();
-            }
-        }
-    }
-
-    /** Ueberschrift einer Gruppe in der Seitenleiste (nicht klickbar). */
-    private class Header extends Control {
-        final String label;
-
-        Header(int x, int y, int w, String label) {
-            this.x = x; this.y = y; this.w = w; this.h = 14; this.label = label;
-        }
-
-        @Override
-        boolean contains(int mx, int my) { return false; }
-
-        @Override
-        void draw(DrawContext ctx, int mx, int my) {
-            String l = label.toUpperCase(java.util.Locale.ROOT);
-            text(ctx, l, x + 6, y + 3, alpha(Theme.accent(), 0.85f));
-            int lx = x + 12 + textRenderer.getWidth(l);
-            if (lx < x + w - 6) ctx.fill(lx, y + 7, x + w - 6, y + 8, alpha(0xFFFFFF, 0.12f));
-        }
-    }
-
-    /** Zahnrad oben rechts: Menue-Einstellungen (Farben, Titel, Animationen ...). */
-    private class GearBtn extends Control {
-        GearBtn(int x, int y) { this.x = x; this.y = y; this.w = 18; this.h = 18; }
 
         @Override
         void draw(DrawContext ctx, int mx, int my) {
             animateHover(mx, my, true);
-            boolean on = activeTab == Tab.SETTINGS;
             int acc = Theme.accent();
-            ctx.fill(x, y, x + w, y + h, on ? alpha(acc, 0.35f) : alpha(0xFFFFFF, 0.06f + 0.10f * hover));
-            if (on) ctx.fill(x, y + h - 2, x + w, y + h, acc);
-            int lc = on || hover > 0.4f ? 0xFFFFFFFF : 0xFFAAAAB6;
-            int[] ky = {y + 4, y + 8, y + 12};
-            int[] kx = {x + 11, x + 5, x + 9};
-            for (int i = 0; i < 3; i++) {
-                ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
-                ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, on ? 0xFFFFFFFF : acc);
-            }
-            if (hover > 0.5f) {
-                String t = "Einstellungen";
-                text(ctx, t, x - 6 - textRenderer.getWidth(t), y + 5, 0xFF9A9AA8);
+            int yy = y - Math.round(hover * 2);
+            ctx.fill(x, yy, x + w, yy + h, mix(0xFF262631, alpha(acc, 0.30f), hover * 0.85f));
+            outline(ctx, x, yy, w, h, alpha(acc, 0.18f + 0.55f * hover));
+            ctx.fill(x, yy, x + Math.round(w * (0.25f + 0.75f * hover)), yy + 2, acc);
+
+            ctx.fill(x + 10, yy + 12, x + 42, yy + 44, alpha(acc, 0.16f + 0.14f * hover));
+            outline(ctx, x + 10, yy + 12, 32, 32, alpha(acc, 0.35f));
+            ctx.drawItem(new ItemStack(tileItem(tab)), x + 18, yy + 20);
+
+            text(ctx, tab.label, x + 10, yy + 51, 0xFFFFFFFF);
+            text(ctx, tileSub(tab), x + 10, yy + 63, 0xFF8A8A96);
+
+            String st = tileStatus(tab);
+            if (st != null) {
+                boolean good = !st.equals("AUS");
+                int cw0 = textRenderer.getWidth(st) + 8;
+                int sx = x + w - cw0 - 8;
+                ctx.fill(sx, yy + 10, sx + cw0, yy + 22, good ? alpha(0x34D399, 0.30f) : alpha(0xFFFFFF, 0.08f));
+                text(ctx, st, sx + 4, yy + 12, good ? 0xFF66DD99 : 0xFF8A8A96);
             }
         }
 
         @Override
-        void press(int mx, int my) {
-            if (activeTab == Tab.SETTINGS) {
-                activeTab = returnTab;
-            } else {
-                returnTab = activeTab;
-                activeTab = Tab.SETTINGS;
-            }
-            tabChangeAt = time();
-            clearAndInit();
+        void press(int mx, int my) { openTab(tab); }
+    }
+
+    /** Kleiner Icon-Knopf oben rechts (Design / Admin). */
+    private class IconBtn extends Control {
+        final int kind; // 0 = Design, 1 = Admin
+        final String tip;
+        final BooleanSupplier on;
+        final Runnable run;
+
+        IconBtn(int x, int y, int kind, String tip, BooleanSupplier on, Runnable run) {
+            this.x = x; this.y = y; this.w = 18; this.h = 18;
+            this.kind = kind; this.tip = tip; this.on = on; this.run = run;
         }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            boolean sel = on.getAsBoolean();
+            int acc = Theme.accent();
+            ctx.fill(x, y, x + w, y + h, sel ? alpha(acc, 0.35f) : alpha(0xFFFFFF, 0.06f + 0.10f * hover));
+            if (sel) ctx.fill(x, y + h - 2, x + w, y + h, acc);
+            int lc = sel || hover > 0.4f ? 0xFFFFFFFF : 0xFFAAAAB6;
+            if (kind == 0) {
+                int[] ky = {y + 4, y + 8, y + 12};
+                int[] kx = {x + 11, x + 5, x + 9};
+                for (int i = 0; i < 3; i++) {
+                    ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
+                    ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, sel ? 0xFFFFFFFF : acc);
+                }
+            } else {
+                int up = adminUnlocked ? 2 : 0;
+                ctx.fill(x + 6, y + 3 - up, x + 12, y + 4 - up, lc);
+                ctx.fill(x + 6, y + 3 - up, x + 7, y + 8, lc);
+                ctx.fill(x + 11, y + 3 - up, x + 12, y + 8 - (adminUnlocked ? 3 : 0), lc);
+                ctx.fill(x + 4, y + 8, x + 14, y + 15, adminUnlocked ? 0xFF66DD99 : lc);
+                ctx.fill(x + 8, y + 10, x + 10, y + 13, 0xFF1E1E28);
+            }
+            if (hover > 0.5f) text(ctx, tip, x + w - textRenderer.getWidth(tip), y + 22, 0xFF9A9AA8);
+        }
+
+        @Override
+        void press(int mx, int my) { run.run(); }
     }
 
     /** Farb-Vorgabe zum Anklicken. */
@@ -508,32 +512,31 @@ public class MenuScreen extends Screen {
     protected void init() {
         left = (width - W) / 2;
         top = (height - H) / 2;
-        cx = left + SB + 14;
+        // Inhaltsbereich der Unterseiten (mittig; frueher neben der Seitenleiste)
+        cw = 484;
+        cx = left + (W - cw) / 2;
         cy = top + 54;
-        cw = W - SB - 28;
         controls.clear();
         active = null;
         hexField = null;
         cmdField = null;
         titleField = null;
-        adminPasswordField = null;
+        pwField = null;
         fields.clear();
 
-        int ny = top + 48;
-        controls.add(new TabBtn(left + 4, ny, SB - 8, TAB_H - 2, Tab.HOME, 8));
-        ny += TAB_H + 4;
-        ny = addNavGroup("Makros", ny, Tab.AUCTION, Tab.HT1, Tab.SPAWNER);
-        ny = addNavGroup("Kosmetik", ny, Tab.CAPES, Tab.CREATOR);
-        ny = addNavGroup(null, ny, Tab.CALC);
-        addNavGroup("Litematica", ny, Tab.MAPART);
-        controls.add(new TabBtn(left + 4, top + H - 62, SB - 8, TAB_H - 2, Tab.ADMIN, 8));
-
-        controls.add(new GearBtn(left + W - 28, top + 12));
+        controls.add(new IconBtn(left + W - 28, top + 12, 1, "Admin", () -> activeTab == Tab.ADMIN || activeTab == Tab.ADMIN_LOGIN, () -> {
+            if (activeTab == Tab.ADMIN || activeTab == Tab.ADMIN_LOGIN) openTab(Tab.HOME);
+            else openTab(adminUnlocked ? Tab.ADMIN : Tab.ADMIN_LOGIN);
+        }));
+        controls.add(new IconBtn(left + W - 50, top + 12, 0, "Design", () -> activeTab == Tab.SETTINGS, () ->
+                openTab(activeTab == Tab.SETTINGS ? Tab.HOME : Tab.SETTINGS)));
         controls.add(new Btn(left + W - 96, top + H - 30, 80, 20, () -> "Fertig", this::close));
+        if (activeTab != Tab.HOME) {
+            controls.add(new Btn(left + W - 190, top + H - 30, 88, 20, () -> "‹ Startseite", () -> openTab(Tab.HOME)));
+        }
 
         switch (activeTab) {
             case HOME -> buildHome();
-            case ADMIN -> buildAdmin();
             case MAPART -> buildMapArt();
             case SETTINGS -> buildSettings();
             case CAPES -> buildCapes();
@@ -542,20 +545,99 @@ public class MenuScreen extends Screen {
             case HT1 -> buildHt1();
             case SPAWNER -> buildSpawner();
             case CALC -> buildCalc();
+            case ADMIN_LOGIN -> buildAdminLogin();
+            case ADMIN -> buildAdmin();
         }
     }
 
-    /** Gruppe mit Ueberschrift (oder einzelner Eintrag ohne Gruppe) in die Seitenleiste setzen; liefert das naechste y. */
-    private int addNavGroup(String title, int y, Tab... tabs) {
-        if (title != null) {
-            controls.add(new Header(left + 4, y, SB - 8, title));
-            y += 15;
+    private void openTab(Tab t) {
+        if (activeTab != t) {
+            activeTab = t;
+            tabChangeAt = time();
+            clearAndInit();
         }
-        for (Tab t : tabs) {
-            controls.add(new TabBtn(left + 4, y, SB - 8, TAB_H - 2, t, title == null ? 8 : 16));
-            y += TAB_H;
+    }
+
+    // ---- Startseite
+
+    private static final Tab[] HOME_TILES = {
+            Tab.AUCTION, Tab.HT1, Tab.SPAWNER, Tab.MAPART,
+            Tab.CAPES, Tab.CREATOR, Tab.CALC, Tab.SETTINGS};
+
+    private static Item tileItem(Tab t) {
+        return switch (t) {
+            case AUCTION -> Items.GOLD_INGOT;
+            case HT1 -> Items.IRON_SWORD;
+            case SPAWNER -> Items.SPAWNER;
+            case MAPART -> Items.FILLED_MAP;
+            case CAPES -> Items.ELYTRA;
+            case CREATOR -> Items.PAINTING;
+            case CALC -> Items.COMPARATOR;
+            default -> Items.PINK_DYE;
+        };
+    }
+
+    private static String tileSub(Tab t) {
+        return switch (t) {
+            case AUCTION -> "Items automatisch verkaufen";
+            case HT1 -> "Bei Schaden sofort raus";
+            case SPAWNER -> "AFK-Schutz fürs Farmen";
+            case MAPART -> "Auto-Platzieren";
+            case CAPES -> "Deine Cape-Bibliothek";
+            case CREATOR -> "Bild zu Cape machen";
+            case CALC -> "Rechnen mit Verlauf";
+            default -> "Farben & Hintergrund";
+        };
+    }
+
+    private static String tileStatus(Tab t) {
+        ModConfig c = ModConfig.get();
+        return switch (t) {
+            case AUCTION -> AuctionMacro.running() ? "LÄUFT" : null;
+            case HT1 -> c.combatLock ? "AN" : "AUS";
+            case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
+            case MAPART -> c.autoPlace ? "AN" : "AUS";
+            default -> null;
+        };
+    }
+
+    private void buildHome() {
+        int gap = 10, gx = left + 14, tw = (W - 28 - 3 * gap) / 4, th = 80, gy = top + 74;
+        for (int i = 0; i < HOME_TILES.length; i++) {
+            controls.add(new Tile(gx + (i % 4) * (tw + gap), gy + (i / 4) * (th + gap), tw, th, HOME_TILES[i]));
         }
-        return y + 4;
+    }
+
+    // ---- Admin-Panel
+
+    private void buildAdminLogin() {
+        int bx = left + W / 2 - 110;
+        pwField = addField(new TextFieldWidget(textRenderer, bx, cy + 52, 220, 20, Text.literal("Passwort")));
+        pwField.setMaxLength(16);
+        pwField.setRenderTextProvider((t, i) -> OrderedText.styledForwardsVisitedString("*".repeat(t.length()), Style.EMPTY));
+        pwField.setChangedListener(t -> {
+            pwError = false;
+            if (t.equals(ADMIN_PASSWORD)) pendingUnlock = true;
+        });
+        setInitialFocus(pwField);
+        controls.add(new Btn(bx, cy + 80, 220, 20, () -> "Entsperren", () -> {
+            if (pwField != null && pwField.getText().equals(ADMIN_PASSWORD)) {
+                pendingUnlock = true;
+            } else {
+                pwError = true;
+                pwErrorAt = time();
+            }
+        }));
+    }
+
+    private void buildAdmin() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 28, COL - 12, "Chat-Koordinaten",
+                () -> cfg.chatCoords, v -> { cfg.chatCoords = v; ModConfig.save(); }));
+        controls.add(new Btn(cx + 10, cy + 126, COL - 20, 20, () -> "Admin-Panel sperren", () -> {
+            adminUnlocked = false;
+            openTab(Tab.HOME);
+        }));
     }
 
     private TextFieldWidget addField(TextFieldWidget f) {
@@ -565,40 +647,6 @@ public class MenuScreen extends Screen {
     }
 
     private static final int COL = 214, COL2 = 234;
-
-    private void buildHome() {
-        controls.add(new Header(cx + 6, cy + 18, cw - 18, "Willkommen"));
-        controls.add(new Btn(cx + 8, cy + 48, 190, 22, () -> "Auktions-Makro öffnen", () -> setTab(Tab.AUCTION)));
-        controls.add(new Btn(cx + 8, cy + 78, 190, 22, () -> "Spawner-Schutz öffnen", () -> setTab(Tab.SPAWNER)));
-        controls.add(new Btn(cx + 8, cy + 108, 190, 22, () -> "Map Art öffnen", () -> setTab(Tab.MAPART)));
-        controls.add(new Btn(cx + 8, cy + 138, 190, 22, () -> "Design-Einstellungen", () -> setTab(Tab.SETTINGS)));
-    }
-
-    private void buildAdmin() {
-        controls.add(new Header(cx + 6, cy + 18, cw - 18, "Admin-Zugang"));
-        if (adminUnlocked) {
-            controls.add(new Btn(cx + 8, cy + 48, 190, 22, () -> "Design-Einstellungen öffnen", () -> setTab(Tab.SETTINGS)));
-            controls.add(new Btn(cx + 8, cy + 78, 190, 22, () -> "Admin-Zugang sperren", () -> { adminUnlocked = false; setTab(Tab.ADMIN); }));
-        } else {
-            adminPasswordField = addField(new TextFieldWidget(textRenderer, cx + 8, cy + 52, 190, 20, Text.literal("Admin-Passwort")));
-            adminPasswordField.setMaxLength(32);
-            controls.add(new Btn(cx + 8, cy + 82, 190, 22, () -> "Anmelden", () -> {
-                if (adminPasswordField != null && "676767".equals(adminPasswordField.getText())) {
-                    adminUnlocked = true;
-                    macroStatus = "Admin-Zugang freigeschaltet.";
-                } else {
-                    macroStatus = "Falsches Passwort.";
-                }
-                setTab(Tab.ADMIN);
-            }));
-            }
-    }
-
-    private void setTab(Tab tab) {
-        activeTab = tab;
-        tabChangeAt = time();
-        clearAndInit();
-    }
 
     private void buildMapArt() {
         ModConfig cfg = ModConfig.get();
@@ -617,14 +665,20 @@ public class MenuScreen extends Screen {
             0x3FA7FF, 0x34D399, 0xF87171, 0xA78BFA, 0xFBBF24, 0xF472B6, 0x22D3EE, 0xFB923C};
     private static final int[] BG_PRESETS = {
             0x1E1E28, 0x14141B, 0x0F1A24, 0x1A1426, 0x14231B, 0x2A1616, 0x262626, 0x0B0B0B};
-    private static final int SET_L = 250, SET_GAP = 10;
+    private static final String[] BG_STYLES = {"Hex", "Sterne", "Regen", "Verlauf", "Raster", "Aurora", "Bild", "Aus"};
+    private static final String[] BORDER_STYLES = {"Schlicht", "Glühend", "Doppelt"};
+    private static final int SET_A = 236, SET_B = 170, SET_GAP = 10;
+
+    private int designX() { return left + 14; }
 
     private void buildSettings() {
         ModConfig cfg = ModConfig.get();
-        int lx = cx;
-        controls.add(new Btn(lx + 10, cy + 22, 112, 18, () -> "Akzentfarbe", () -> { editAccent = true; clearAndInit(); })
+        int lx = designX();
+
+        // ---- Karte 1: Farben
+        controls.add(new Btn(lx + 10, cy + 22, 106, 18, () -> "Akzentfarbe", () -> { editAccent = true; clearAndInit(); })
                 .selectedIf(() -> editAccent));
-        controls.add(new Btn(lx + 126, cy + 22, 112, 18, () -> "Hintergrund", () -> { editAccent = false; clearAndInit(); })
+        controls.add(new Btn(lx + 122, cy + 22, 106, 18, () -> "Hintergrund", () -> { editAccent = false; clearAndInit(); })
                 .selectedIf(() -> !editAccent));
 
         int rgb = editedColor();
@@ -647,7 +701,7 @@ public class MenuScreen extends Screen {
             } catch (NumberFormatException ignored) {
             }
         });
-        controls.add(new Btn(rx, cy + 76, lx + SET_L - 10 - rx, 18, () -> "Zurücksetzen", () -> {
+        controls.add(new Btn(rx, cy + 76, lx + SET_A - 10 - rx, 18, () -> "Zurücksetzen", () -> {
             setEditedColor(editAccent ? ModConfig.DEFAULT_ACCENT : ModConfig.DEFAULT_BG);
             clearAndInit();
         }));
@@ -657,24 +711,62 @@ public class MenuScreen extends Screen {
             controls.add(new Swatch(lx + 14 + i * 26, cy + 158, 22, 14, presets[i]));
         }
 
-        // rechte Karte: Menue
-        int px = cx + SET_L + SET_GAP, pw = cw - SET_L - SET_GAP;
-        // Der offizielle Mod-Name ist fest und nicht über die Design-Einstellungen änderbar.
-        cfg.menuTitle = ModConfig.DEFAULT_TITLE;
+        // ---- Karte 2: Hintergrund-Effekt
+        int bx = lx + SET_A + SET_GAP;
+        int bw = (SET_B - 24) / 2;
+        for (int i = 0; i < BG_STYLES.length; i++) {
+            final int idx = i;
+            controls.add(new Btn(bx + 10 + (i % 2) * (bw + 4), cy + 26 + (i / 2) * 22, bw, 18,
+                    () -> BG_STYLES[idx], () -> cfg.bgStyle = idx).selectedIf(() -> cfg.bgStyle == idx));
+        }
+        controls.add(new Btn(bx + 10, cy + 118, SET_B - 20, 18, () -> {
+            String n = cfg.customBackground;
+            return "Bild: " + (n == null || n.isEmpty() ? "keins" : shorten(n, 14));
+        }, () -> {
+            List<String> files = BackgroundImage.list();
+            if (files.isEmpty()) {
+                BackgroundImage.status = "Noch kein Bild. PNG/JPG ins Fenster ziehen.";
+                return;
+            }
+            int i = files.indexOf(cfg.customBackground);
+            String next = i + 1 >= files.size() ? "" : files.get(i + 1);
+            BackgroundImage.select(next);
+            if (!next.isEmpty()) cfg.bgStyle = 6;
+        }));
+        controls.add(new Btn(bx + 10, cy + 140, SET_B - 20, 18, () -> "Bilder-Ordner öffnen", () -> {
+            try {
+                Files.createDirectories(BackgroundImage.dir());
+                Util.getOperatingSystem().open(BackgroundImage.dir().toUri());
+            } catch (Exception ex) {
+                BackgroundImage.status = "Ordner konnte nicht geöffnet werden.";
+            }
+        }));
+        controls.add(new Sld(bx + 12, cy + 164, SET_B - 24, "Bild abdunkeln", " %", 0, 90,
+                () -> cfg.customBgDim, v -> cfg.customBgDim = v));
 
-        controls.add(new Sld(px + 12, cy + 62, pw - 24, "Hintergrund-Deckkraft", " %", 40, 100,
+        // ---- Karte 3: Menue
+        int px = bx + SET_B + SET_GAP, pw = left + W - 14 - px;
+        controls.add(new Sld(px + 12, cy + 62, pw - 24, "Deckkraft", " %", 40, 100,
                 () -> cfg.bgOpacity, v -> cfg.bgOpacity = v));
-        controls.add(new Tog(px + 6, cy + 96, pw - 12, "Hex-Animation", () -> cfg.hexBackground, v -> cfg.hexBackground = v));
-        controls.add(new Tog(px + 6, cy + 120, pw - 12, "Übergangs-Animationen", () -> cfg.menuAnimations, v -> cfg.menuAnimations = v));
-        controls.add(new Btn(px + 10, cy + 152, pw - 20, 20, () -> "Alles zurücksetzen", () -> {
+        controls.add(new Tog(px + 6, cy + 94, pw - 12, "Übergänge", () -> cfg.menuAnimations, v -> cfg.menuAnimations = v));
+        controls.add(new Tog(px + 6, cy + 118, pw - 12, "Regenbogen", () -> cfg.rainbowAccent, v -> cfg.rainbowAccent = v));
+        controls.add(new Btn(px + 10, cy + 144, pw - 20, 18, () -> "Rahmen: " + BORDER_STYLES[cfg.borderStyle % 3],
+                () -> cfg.borderStyle = (cfg.borderStyle + 1) % 3));
+        controls.add(new Btn(px + 10, cy + 168, pw - 20, 18, () -> "Alles zurücksetzen", () -> {
             cfg.accentColor = ModConfig.DEFAULT_ACCENT;
             cfg.bgColor = ModConfig.DEFAULT_BG;
-            cfg.menuTitle = ModConfig.DEFAULT_TITLE;
             cfg.bgOpacity = 97;
-            cfg.hexBackground = true;
+            cfg.bgStyle = 0;
+            cfg.borderStyle = 0;
+            cfg.rainbowAccent = false;
             cfg.menuAnimations = true;
+            cfg.customBgDim = 55;
             clearAndInit();
         }));
+    }
+
+    private static String shorten(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 
     private void buildCapes() {
@@ -835,6 +927,14 @@ public class MenuScreen extends Screen {
 
     @Override
     public void onFilesDropped(List<Path> paths) {
+        if (activeTab == Tab.SETTINGS) {
+            for (Path p : paths) {
+                String err = BackgroundImage.importFile(p);
+                if (err == null) ModConfig.get().bgStyle = 6;
+                else BackgroundImage.status = err;
+            }
+            return;
+        }
         if (activeTab == Tab.CREATOR) {
             String err = null;
             for (Path p : paths) {
@@ -917,30 +1017,164 @@ public class MenuScreen extends Screen {
         ctx.fill(0, 0, width, height, alpha(0x000000, 0.40f * ease));
 
         int bg = Theme.bg();
-        ctx.fillGradient(left, top, left + W, top + H, alpha(mix(bg, 0xFFFFFFFF, 0.07f), cfg.bgOpacity / 100f), alpha(bg, cfg.bgOpacity / 100f));
-        if (cfg.hexBackground) drawHexBackground(ctx, time());
-        // Seitenleiste
-        ctx.fill(left, top, left + SB, top + H, 0x55000000);
-        ctx.fill(left + SB, top, left + SB + 1, top + H, alpha(acc, 0.35f));
-        // Kopf- und Fussleiste des Inhalts
-        ctx.fill(left + SB + 1, top, left + W, top + 42, 0x40000000);
-        ctx.fill(left + SB + 1, top + 42, left + W, top + 43, alpha(acc, 0.35f));
-        ctx.fill(left + SB + 1, top + H - 38, left + W, top + H, 0x30000000);
-        outline(ctx, left, top, W, H, alpha(acc, 0.55f));
+        float op = cfg.bgOpacity / 100f;
+        ctx.fillGradient(left, top, left + W, top + H, alpha(mix(bg, 0xFFFFFFFF, 0.07f), op), alpha(bg, op));
+        drawBackgroundEffect(ctx, time());
+
+        // Kopf- und Fussleiste
+        ctx.fill(left + 1, top, left + W, top + 42, 0x40000000);
+        ctx.fill(left + 1, top + 42, left + W, top + 43, alpha(acc, 0.35f));
+        ctx.fill(left + 1, top + H - 38, left + W, top + H, 0x30000000);
+
+        float pulse = 0.5f + 0.5f * (float) Math.sin(time() * 2.2f);
+        switch (cfg.borderStyle) {
+            case 1 -> {
+                outline(ctx, left, top, W, H, alpha(acc, 0.35f + 0.5f * pulse));
+                outline(ctx, left - 1, top - 1, W + 2, H + 2, alpha(acc, 0.10f + 0.25f * pulse));
+                outline(ctx, left - 2, top - 2, W + 4, H + 4, alpha(acc, 0.04f + 0.12f * pulse));
+            }
+            case 2 -> {
+                outline(ctx, left, top, W, H, alpha(acc, 0.7f));
+                outline(ctx, left + 3, top + 3, W - 6, H - 6, alpha(acc, 0.25f));
+            }
+            default -> outline(ctx, left, top, W, H, alpha(acc, 0.55f));
+        }
         ctx.fill(left, top, left + Math.round(W * ease), top + 2, acc);
 
-        // Titel in der Seitenleiste (erstes Wort in Akzentfarbe, Rest darunter)
+        // Fester Titel (erstes Wort in Akzentfarbe, Rest darunter)
         String title = ModConfig.DEFAULT_TITLE;
-        ModConfig.get().menuTitle = ModConfig.DEFAULT_TITLE;
         int sp = title.indexOf(' ');
         String first = sp < 0 ? title : title.substring(0, sp);
         String rest = sp < 0 ? "" : title.substring(sp + 1);
-        text(ctx, first, left + 10, top + 10, acc);
-        if (!rest.isEmpty()) text(ctx, rest, left + 10, top + 22, 0xFFFFFFFF);
-        ctx.fill(left + 8, top + 41, left + SB - 8, top + 42, alpha(0xFFFFFF, 0.12f));
+        text(ctx, first, left + 14, top + 10, acc);
+        if (!rest.isEmpty()) text(ctx, rest, left + 14, top + 22, 0xFFFFFFFF);
 
-        // Ueberschrift des aktiven Bereichs
-        text(ctx, activeTab.title(), left + SB + 16, top + 17, 0xFFFFFFFF);
+        // Aktueller Bereich
+        if (activeTab != Tab.HOME) {
+            text(ctx, "›", left + 120, top + 17, alpha(0xFFFFFF, 0.35f));
+            text(ctx, activeTab.title(), left + 132, top + 17, 0xFFFFFFFF);
+        }
+    }
+
+    private void clipPanel(DrawContext ctx) { ctx.enableScissor(left, top, left + W, top + H); }
+
+    private void drawBackgroundEffect(DrawContext ctx, float t) {
+        ModConfig cfg = ModConfig.get();
+        switch (cfg.bgStyle) {
+            case 0 -> drawHexBackground(ctx, t);
+            case 1 -> drawStars(ctx, t);
+            case 2 -> drawRain(ctx, t);
+            case 3 -> drawSheen(ctx, t);
+            case 4 -> drawGrid(ctx, t);
+            case 5 -> drawAurora(ctx, t);
+            case 6 -> drawImageBackground(ctx, t);
+            default -> { }
+        }
+    }
+
+    private static int hash(int v) {
+        v ^= v >>> 16; v *= 0x7feb352d; v ^= v >>> 15; v *= 0x846ca68b; v ^= v >>> 16;
+        return v & 0x7fffffff;
+    }
+
+    private void drawStars(DrawContext ctx, float t) {
+        int acc = Theme.accent();
+        clipPanel(ctx);
+        for (int i = 0; i < 90; i++) {
+            int h1 = hash(i * 7919 + 1), h2 = hash(i * 104729 + 13);
+            float speed = 2f + (h1 & 7) * 0.8f;
+            float x = (h1 % W) - t * speed;
+            x -= (float) Math.floor(x / W) * W;
+            int y = h2 % H;
+            float tw = 0.5f + 0.5f * (float) Math.sin(t * (1f + (h2 & 3) * 0.6f) + i);
+            int size = (h1 % 11 == 0) ? 2 : 1;
+            int col = alpha(i % 5 == 0 ? acc : 0xFFFFFF, 0.20f + 0.65f * tw);
+            int sx = left + (int) x, sy = top + y;
+            ctx.fill(sx, sy, sx + size, sy + size, col);
+        }
+        ctx.disableScissor();
+    }
+
+    private void drawRain(DrawContext ctx, float t) {
+        int acc = Theme.accent();
+        clipPanel(ctx);
+        for (int i = 0; i < 70; i++) {
+            int h1 = hash(i * 31337 + 5), h2 = hash(i * 9973 + 77);
+            float speed = 60f + (h1 % 90);
+            int len = 6 + (h2 % 9);
+            int x = left + (h1 % W);
+            float y = ((h2 % (H + 40)) + t * speed) % (H + 40) - 20;
+            int sy = top + (int) y;
+            ctx.fill(x, sy, x + 1, sy + len, alpha(acc, 0.12f + (h1 % 25) / 100f));
+        }
+        ctx.disableScissor();
+    }
+
+    private void drawSheen(DrawContext ctx, float t) {
+        int acc = Theme.accent();
+        float p = 0.5f + 0.5f * (float) Math.sin(t * 0.5f);
+        clipPanel(ctx);
+        ctx.fillGradient(left, top, left + W, top + H, alpha(acc, 0.10f + 0.14f * p), alpha(acc, 0.0f));
+        int sx = left + (int) ((t * 45f) % (W + 200)) - 100;
+        for (int k = 0; k < 90; k++) {
+            float f = 1f - Math.abs(k - 45) / 45f;
+            ctx.fill(sx + k, top, sx + k + 1, top + H, alpha(0xFFFFFF, 0.06f * f));
+        }
+        ctx.disableScissor();
+    }
+
+    private void drawGrid(DrawContext ctx, float t) {
+        int acc = Theme.accent();
+        final int step = 24;
+        float ox = (t * 14f) % step, oy = (t * 8f) % step;
+        clipPanel(ctx);
+        for (int x = -step; x < W + step; x += step) {
+            int px = left + Math.round(x + ox);
+            ctx.fill(px, top, px + 1, top + H, alpha(acc, 0.07f));
+        }
+        for (int y = -step; y < H + step; y += step) {
+            int py = top + Math.round(y + oy);
+            ctx.fill(left, py, left + W, py + 1, alpha(acc, 0.07f));
+        }
+        int band = top + (int) ((t * 50f) % (H + 24)) - 12;
+        ctx.fillGradient(left, band - 12, left + W, band, alpha(acc, 0f), alpha(acc, 0.16f));
+        ctx.fillGradient(left, band, left + W, band + 12, alpha(acc, 0.16f), alpha(acc, 0f));
+        ctx.disableScissor();
+    }
+
+    private void drawAurora(DrawContext ctx, float t) {
+        int acc = Theme.accent();
+        int[] cols = {acc, mix(acc, 0xFF34D399, 0.6f), mix(acc, 0xFFA78BFA, 0.6f)};
+        clipPanel(ctx);
+        for (int b = 0; b < 3; b++) {
+            for (int x = 0; x < W; x += 3) {
+                float yc = top + H * (0.30f + 0.12f * b) + 26f * (float) Math.sin(t * (0.35f + 0.1f * b) + x * 0.012f + b * 2f);
+                int y0 = Math.round(yc);
+                ctx.fillGradient(left + x, y0 - 34, left + x + 3, y0, alpha(cols[b], 0f), alpha(cols[b], 0.17f));
+                ctx.fillGradient(left + x, y0, left + x + 3, y0 + 34, alpha(cols[b], 0.17f), alpha(cols[b], 0f));
+            }
+        }
+        ctx.disableScissor();
+    }
+
+    private void drawImageBackground(DrawContext ctx, float t) {
+        BackgroundImage.Data d = BackgroundImage.get();
+        if (d == null) {
+            drawSheen(ctx, t);
+            return;
+        }
+        float ar = W / (float) H;
+        int sw, sh;
+        if (d.w() / (float) d.h() > ar) {
+            sh = d.h();
+            sw = Math.round(sh * ar);
+        } else {
+            sw = d.w();
+            sh = Math.round(sw / ar);
+        }
+        int u = (d.w() - sw) / 2, v = (d.h() - sh) / 2;
+        ctx.drawTexture(RenderPipelines.GUI_TEXTURED, d.id(), left, top, u, v, W, H, sw, sh, d.w(), d.h());
+        ctx.fill(left, top, left + W, top + H, alpha(0x000000, ModConfig.get().customBgDim / 100f));
     }
 
     /** Dezent animiertes Sechseck-Muster: driftet langsam, pulsiert, ein Lichtfleck wandert darueber. */
@@ -990,6 +1224,11 @@ public class MenuScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        if (pendingUnlock) {
+            pendingUnlock = false;
+            adminUnlocked = true;
+            openTab(Tab.ADMIN);
+        }
         // Maus direkt abfragen
         boolean down = client != null && GLFW.glfwGetMouseButton(
                 client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
@@ -1019,19 +1258,10 @@ public class MenuScreen extends Screen {
         for (Control c : snapshot) c.draw(ctx, mouseX, mouseY);
         renderOverlay(ctx);
 
-        // Reiter-Indikator gleitet an der Seitenleiste zum aktiven Reiter
-        for (Control c : snapshot) {
-            if (c instanceof TabBtn tb && tb.tab == activeTab) {
-                if (tabIndY < 0) tabIndY = tb.y;
-                tabIndY += (tb.y - tabIndY) * 0.28f;
-                ctx.fill(left + 1, Math.round(tabIndY), left + 4, Math.round(tabIndY) + tb.h, Theme.accent());
-            }
-        }
-
         // Ueberblenden beim Reiterwechsel
         float p = ModConfig.get().menuAnimations ? Math.min(1f, (time() - tabChangeAt) / 0.22f) : 1f;
         if (p < 1f) {
-            ctx.fill(left + SB + 2, top + 44, left + W - 1, top + H - 39, alpha(Theme.bg(), 0.85f * (1f - p)));
+            ctx.fill(left + 2, top + 44, left + W - 1, top + H - 39, alpha(Theme.bg(), 0.85f * (1f - p)));
         }
     }
 
@@ -1052,9 +1282,17 @@ public class MenuScreen extends Screen {
                 card(ctx, cx + COL2, cy - 4, COL, 150, "Experimentell");
             }
             case SETTINGS -> {
-                card(ctx, cx, cy - 4, SET_L, 186, "Farben");
-                card(ctx, cx + SET_L + SET_GAP, cy - 4, cw - SET_L - SET_GAP, 186, "Menü");
+                int lx = designX(), bx = lx + SET_A + SET_GAP, px = bx + SET_B + SET_GAP;
+                card(ctx, lx, cy - 4, SET_A, 196, "Farben");
+                card(ctx, bx, cy - 4, SET_B, 196, "Hintergrund");
+                card(ctx, px, cy - 4, left + W - 14 - px, 196, "Menü");
             }
+            case ADMIN_LOGIN -> card(ctx, left + W / 2 - 130, cy - 4, 260, 124, "Admin-Panel");
+            case ADMIN -> {
+                card(ctx, cx, cy - 4, COL, 158, "Chat-Koordinaten");
+                card(ctx, cx + COL2, cy - 4, COL, 158, "So funktioniert es");
+            }
+            case HOME -> { }
             case CAPES -> {
                 int rx = cx + LIST_W + 10, rw = cx + cw - rx;
                 card(ctx, rx, cy, rw, 126, null);
@@ -1097,7 +1335,52 @@ public class MenuScreen extends Screen {
             case HT1 -> renderHt1(ctx);
             case SPAWNER -> renderSpawner(ctx);
             case CALC -> renderCalc(ctx);
+            case HOME -> renderHome(ctx);
+            case ADMIN_LOGIN -> renderAdminLogin(ctx);
+            case ADMIN -> renderAdmin(ctx);
         }
+    }
+
+    private void renderHome(DrawContext ctx) {
+        text(ctx, "Wähle einen Bereich", left + 14, top + 54, 0xFFCCCCCC);
+        ModConfig c = ModConfig.get();
+        List<String> on = new ArrayList<>();
+        if (c.autoPlace) on.add("Auto-Platzieren");
+        if (c.combatLock) on.add("Combat Lock");
+        if (c.spawnerGuard) on.add("Spawner-Schutz");
+        if (AuctionMacro.running()) on.add("Auktions-Makro");
+        text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
+                left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);
+    }
+
+    private void drawWrapped(DrawContext ctx, String s, int x, int y, int maxW, int color) {
+        for (OrderedText l : textRenderer.wrapLines(Text.literal(s), maxW)) {
+            ctx.drawTextWithShadow(textRenderer, l, x, y, color);
+            y += 11;
+        }
+    }
+
+    private void renderAdminLogin(DrawContext ctx) {
+        int mx = left + W / 2;
+        textCentered(ctx, "Bitte Passwort eingeben", mx, cy + 30, 0xFFCCCCCC);
+        if (pwError) {
+            float p = Math.min(1f, (time() - pwErrorAt) / 0.4f);
+            int shake = Math.round((float) Math.sin(p * 30f) * 3f * (1f - p));
+            textCentered(ctx, "Falsches Passwort", mx + shake, cy + 106, 0xFFFF6666);
+        }
+    }
+
+    private void renderAdmin(DrawContext ctx) {
+        ModConfig c = ModConfig.get();
+        text(ctx, c.chatCoords ? "Status: AN" : "Status: AUS", cx + 12, cy + 62, c.chatCoords ? 0xFF66DD77 : 0xFFDD6666);
+        drawWrapped(ctx, "Zeigt unter jeder Chatnachricht die Position (X / Y / Z) des Absenders.",
+                cx + 12, cy + 78, COL - 24, 0xFF999999);
+        int rx = cx + COL2 + 12;
+        drawWrapped(ctx, "Die Position kommt aus deiner lokal geladenen Welt, also nur für Spieler in Render-Distanz.",
+                rx, cy + 28, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "Ist der Absender weiter weg, steht dort \"Position unbekannt\". Seine echten Koordinaten kennt der Client dann nicht.",
+                rx, cy + 62, COL - 24, 0xFF777783);
+        drawWrapped(ctx, "Dafür wäre ein Server-Plugin nötig.", rx, cy + 106, COL - 24, 0xFF777783);
     }
 
     private void renderSpawner(DrawContext ctx) {
@@ -1182,16 +1465,26 @@ public class MenuScreen extends Screen {
     }
 
     private void renderSettings(DrawContext ctx) {
-        int rx = cx + 14 + S + 10 + HUE_W + 16;
+        int lx = designX();
+        int rx = lx + 14 + S + 10 + HUE_W + 16;
         text(ctx, "#", rx - 9, cy + 55, 0xFFCCCCCC);
         text(ctx, "Vorschau", rx, cy + 100, 0xFFCCCCCC);
-        int sw = cx + SET_L - 10 - rx;
+        int sw = lx + SET_A - 10 - rx;
         ctx.fill(rx - 1, cy + 111, rx + sw + 1, cy + 129, 0xFF000000);
         ctx.fill(rx, cy + 112, rx + sw, cy + 128, 0xFF000000 | editedColor());
-        text(ctx, "Voreinstellungen", cx + 14, cy + 150, 0xFF777783);
+        text(ctx, "Voreinstellungen", lx + 14, cy + 150, 0xFF777783);
 
-        int px = cx + SET_L + SET_GAP;
-        text(ctx, "Menü-Titel (Sidebar oben links)", px + 10, cy + 22, 0xFF999999);
+        int bx = lx + SET_A + SET_GAP, px = bx + SET_B + SET_GAP;
+        if (ModConfig.get().bgStyle == 6 && BackgroundImage.get() == null) {
+            text(ctx, "PNG/JPG ins Fenster ziehen", bx + 10, cy + 108, 0xFFFFD866);
+        }
+        text(ctx, "Menü-Titel (fest)", px + 10, cy + 22, 0xFF999999);
+        int pw = left + W - 14 - px;
+        ctx.fill(px + 10, cy + 33, px + pw - 10, cy + 51, 0x40000000);
+        outline(ctx, px + 10, cy + 33, pw - 20, 18, alpha(Theme.accent(), 0.3f));
+        text(ctx, shorten(ModConfig.DEFAULT_TITLE, 20), px + 15, cy + 38, 0xFFAAAAB6);
+        String bs = BackgroundImage.status;
+        text(ctx, bs == null ? "" : bs, left + 14, top + H - 24, 0xFFFFD866);
     }
 
     private void renderCapes(DrawContext ctx) {

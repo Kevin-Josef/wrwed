@@ -1,5 +1,6 @@
 package de.mapartassist.chat;
 
+import de.mapartassist.config.ModConfig;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
@@ -13,6 +14,7 @@ public final class ChatCoordinates {
     public static void init() {
         ClientReceiveMessageEvents.CHAT.register((message, signedMessage, sender, parameters, receptionTimestamp) -> {
             MinecraftClient client = MinecraftClient.getInstance();
+            if (!ModConfig.get().chatCoords) return;
             if (client.world == null || sender == null) return;
 
             PlayerEntity player = client.world.getPlayerByUuid(sender.id());

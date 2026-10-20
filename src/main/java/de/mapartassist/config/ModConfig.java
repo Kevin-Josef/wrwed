@@ -31,8 +31,20 @@ public class ModConfig {
     public int maxPerTick = 2;
     /** Name des gewaehlten Capes aus der Bibliothek, leer = keins. */
     public String selectedCape = "";
-    /** Titel im Menue-Kopf. Erstes Wort wird in der Akzentfarbe gezeigt. */
+    /** Veraltet (Titel ist jetzt fest). Bleibt nur, damit alte Config-Dateien noch lesbar sind. */
     public String menuTitle = DEFAULT_TITLE;
+    /** Chat-Koordinaten (Admin-Panel): bei Chatnachrichten die Position des Absenders anzeigen. */
+    public boolean chatCoords = false;
+    /** Design: 0 Hex, 1 Sterne, 2 Regen, 3 Farbverlauf, 4 Raster, 5 Aurora, 6 Eigenes Bild, 7 Keine. */
+    public int bgStyle = 0;
+    /** Farbe der Hintergrund-Effekte folgt einem Regenbogen. */
+    public boolean rainbowAccent = false;
+    /** Rahmen: 0 schlicht, 1 pulsierend (Glow), 2 doppelt. */
+    public int borderStyle = 0;
+    /** Dateiname des eigenen Hintergrundbilds (liegt in config/mapartassist/backgrounds). */
+    public String customBackground = "";
+    /** Helligkeit des eigenen Bildes in Prozent. */
+    public int customBgDim = 55;
     /** Makros: Items (Registry-IDs, z. B. minecraft:tnt), die verkauft werden sollen. */
     public List<String> sellItems = new ArrayList<>();
     /** Pro Item: wie viele pro Verkauf (0 = ganzer Stack). */
@@ -62,7 +74,7 @@ public class ModConfig {
     /** Nach dem Befehl zusaetzlich den Server verlassen. */
     public boolean spawnerGuardLeaveAfter = false;
     /** Sekunden zwischen Befehl und Verlassen (damit der Teleport ankommt). */
-    public int spawnerGuardLeaveDelaySec = 1;
+    public int spawnerGuardLeaveDelaySec = 3;
     /** Menue-Einstellungen (Zahnrad oben rechts). */
     public int bgOpacity = 97;
     public boolean hexBackground = true;
@@ -95,7 +107,11 @@ public class ModConfig {
                 // durch einen alten gespeicherten true-Wert stillschweigend aktiv lassen.
                 loaded.macroDryRun = false;
                 if (loaded.spawnerGuardCommandText == null) loaded.spawnerGuardCommandText = "/spawn";
-                if (loaded.menuTitle == null) loaded.menuTitle = DEFAULT_TITLE;
+                // Titel ist fest und nicht mehr aenderbar
+                loaded.menuTitle = DEFAULT_TITLE;
+                if (loaded.customBackground == null) loaded.customBackground = "";
+                loaded.bgStyle = Math.max(0, Math.min(7, loaded.bgStyle));
+                loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
                 loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
                 INSTANCE = loaded;
