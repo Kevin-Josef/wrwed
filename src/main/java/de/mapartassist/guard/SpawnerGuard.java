@@ -96,11 +96,26 @@ public final class SpawnerGuard {
         sneakForced = true;
     }
 
+    private static boolean attackForced;
+    private static boolean forwardForced;
+
+    private static void pressAttack(MinecraftClient client, boolean down) {
+        if (!down && !attackForced) return;
+        client.options.attackKey.setPressed(down);
+        attackForced = down;
+    }
+
+    private static void pressForward(MinecraftClient client, boolean down) {
+        if (!down && !forwardForced) return;
+        client.options.forwardKey.setPressed(down);
+        forwardForced = down;
+    }
+
+    /** Gibt nur Tasten frei, die diese Funktion selbst gedrueckt hat (sonst wuerde Laufen blockiert). */
     private static void releaseKeys(MinecraftClient client) {
-        if (client != null && client.options != null) {
-            client.options.attackKey.setPressed(false);
-            client.options.forwardKey.setPressed(false);
-        }
+        if (client == null || client.options == null) return;
+        pressAttack(client, false);
+        pressForward(client, false);
     }
 
     private static void releaseSneak(MinecraftClient client) {
@@ -279,16 +294,16 @@ public final class SpawnerGuard {
         lookAt(p, Vec3d.ofCenter(current));
         HitResult h = client.crosshairTarget;
         boolean aimed = h instanceof BlockHitResult bhr && bhr.getBlockPos().equals(current);
-        client.options.attackKey.setPressed(aimed); // nie einen anderen Block treffen
+        pressAttack(client, aimed); // nie einen anderen Block treffen
 
         if (client.interactionManager.isBreakingBlock()) {
             breakStarted = true;
         } else if (breakStarted) {
-            client.options.attackKey.setPressed(false);
+            pressAttack(client, false);
             return true; // Fortschritt 100 %: dieser Abbau ist fertig
         }
         if (breakTicks > BREAK_MAX_TICKS) {
-            client.options.attackKey.setPressed(false);
+            pressAttack(client, false);
             return true; // Zeitlimit; VERIFY entscheidet, ob es nochmal versucht wird
         }
         return false;
@@ -325,7 +340,7 @@ public final class SpawnerGuard {
             startLeaving(client);
             return;
         }
-        if (items.isEmpty()) { client.options.forwardKey.setPressed(false); return; }
+        if (items.isEmpty()) { pressForward(client, false); return; }
         ItemEntity nearest = items.get(0);
         for (ItemEntity it : items) if (p.squaredDistanceTo(it) < p.squaredDistanceTo(nearest)) nearest = it;
         status = "Sammle Spawner ein (" + items.size() + " Drop(s) in der Nähe) ...";
@@ -333,9 +348,9 @@ public final class SpawnerGuard {
         if (dx * dx + dz * dz > 0.6 * 0.6) {
             p.setYaw((float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0));
             p.setPitch(20f);
-            client.options.forwardKey.setPressed(true);
+            pressForward(client, true);
         } else {
-            client.options.forwardKey.setPressed(false);
+            pressForward(client, false);
         }
     }
 

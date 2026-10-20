@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.option.KeyBinding;
@@ -136,6 +137,55 @@ public class MapArtAssistClient implements ClientModInitializer {
                 });
     }
 
+    // ------------------------------------------------------------------ Auto-Schleichen
+    private boolean autoSneakForced = false;
+    private int sneakHeldTicks = 0;
+
+    /** Bloecke, bei denen ein Rechtsklick ein Menue oeffnet und deshalb geschlichen werden muss. */
+    private static boolean isSneakBlock(BlockState st) {
+        return st.isOf(Blocks.DISPENSER);
+    }
+
+    /**
+     * true, wenn gerade ein Dispenser anvisiert ist, an dessen Seite der Schematic-Block
+     * gesetzt werden soll, und genau dieser Block in der Hand liegt.
+     */
+    private boolean wantsDispenserSneak(MinecraftClient client, ModConfig cfg) {
+        if (!cfg.autoPlace || client.player == null || client.world == null || client.currentScreen != null) return false;
+        if (!(client.crosshairTarget instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) return false;
+        if (!isSneakBlock(client.world.getBlockState(hit.getBlockPos()))) return false;
+        if (client.player.getEyePos().squaredDistanceTo(hit.getPos()) > REACH * REACH) return false;
+        World schematic = LitematicaBridge.getSchematicWorld();
+        if (schematic == null) return false;
+        BlockPos target = hit.getBlockPos().offset(hit.getSide());
+        BlockState wanted = schematic.getBlockState(target);
+        if (wanted.isAir()) return false;
+        BlockState actual = client.world.getBlockState(target);
+        if (actual.getBlock() == wanted.getBlock()) return false;
+        if (!actual.isAir() && !actual.isReplaceable()) return false;
+        return isBlock(client.player.getMainHandStack(), wanted.getBlock());
+    }
+
+    /** Schleichen nur solange der Dispenser anvisiert wird; danach wird nur eigenes Schleichen wieder beendet. */
+    private void updateAutoSneak(MinecraftClient client, ModConfig cfg) {
+        if (client.player == null || client.options == null) return;
+        sneakHeldTicks = client.player.isSneaking() ? sneakHeldTicks + 1 : 0;
+        boolean want = wantsDispenserSneak(client, cfg);
+        if (want && !autoSneakForced && !client.options.sneakKey.isPressed()) {
+            client.options.sneakKey.setPressed(true);
+            autoSneakForced = true;
+        } else if (!want && autoSneakForced) {
+            client.options.sneakKey.setPressed(false);
+            autoSneakForced = false;
+        }
+    }
+
+    /** Platzieren erst, wenn bei einem Dispenser das Schleichen schon beim Server angekommen ist. */
+    private boolean sneakReadyFor(MinecraftClient client, BlockHitResult hit) {
+        if (!isSneakBlock(client.world.getBlockState(hit.getBlockPos()))) return true;
+        return client.player.isSneaking() && sneakHeldTicks >= 2;
+    }
+
     /** Called every rendered frame. Places directly with the exact, freshly validated crosshair hit. */
     private void onFrame(MinecraftClient client) {
         ModConfig cfg = ModConfig.get();
@@ -183,6 +233,9 @@ public class MapArtAssistClient implements ClientModInitializer {
             return;
         }
 
+        // Dispenser anvisiert: erst schleichen, sonst oeffnet der Rechtsklick dessen Inventar.
+        if (!sneakReadyFor(client, hit)) return;
+
         // Exact held item + exact hit, verified in this very frame: nothing can go stale.
         recentAttempts.put(target.toImmutable(), tickCounter);
         client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hit);
@@ -223,6 +276,8 @@ public class MapArtAssistClient implements ClientModInitializer {
                         .formatted(cfg.autoPlace ? Formatting.GREEN : Formatting.RED), true);
             }
         }
+
+        updateAutoSneak(client, cfg);
 
         if (!cfg.autoPlace || client.player == null || client.world == null
                 || client.currentScreen != null || client.interactionManager == null) return;
@@ -313,6 +368,9 @@ public class MapArtAssistClient implements ClientModInitializer {
             cooldown = 2;
             return;
         }
+
+        // Dispenser anvisiert: erst schleichen, sonst oeffnet der Rechtsklick dessen Inventar.
+        if (!sneakReadyFor(client, hit)) return;
 
         // Click through vanilla's normal input handler (smooth movement). The click is
         // consumed at the start of the next tick; guardClick() re-checks everything
