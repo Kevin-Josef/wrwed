@@ -56,6 +56,7 @@ public final class AuctionMacro {
     private static boolean f8Down = false;
     private static boolean sentSell = false;
     private static int countBeforeSell = 0;
+    private static int minCountSeen = Integer.MAX_VALUE;
     private static boolean filterToggleTried = false;
 
     private static int failedSells = 0;
@@ -294,6 +295,7 @@ public final class AuctionMacro {
                     say("[TESTLAUF, nicht gesendet] /" + cmd + "   " + info, Formatting.AQUA);
                 } else {
                     countBeforeSell = count(p, cur.item());
+                    minCountSeen = countBeforeSell;
                     sentSell = true;
                     lastServerMsg = "";
                     watchChat = 100;
@@ -310,6 +312,7 @@ public final class AuctionMacro {
                 timer = 0;
             }
             case CONFIRM -> {
+                if (cur != null) minCountSeen = Math.min(minCountSeen, count(p, cur.item()));
                 // Manche Auktions-Plugins oeffnen nach /ah sell ein Bestaetigungsmenue.
                 if (auctionOpen(client, p)) {
                     if (timer < 4) return; // Inhalt vom Server laden lassen
@@ -331,6 +334,7 @@ public final class AuctionMacro {
                 }
             }
             case DELAY -> {
+                if (sentSell && cur != null) minCountSeen = Math.min(minCountSeen, count(p, cur.item()));
                 if (client.currentScreen instanceof HandledScreen<?> && p.currentScreenHandler != p.playerScreenHandler && timer >= 10) {
                     p.closeHandledScreen();
                 }
@@ -340,29 +344,31 @@ public final class AuctionMacro {
                     if (sentSell && cur != null) {
                         sentSell = false;
                         int now = count(p, cur.item());
-                        say("Nach /ah sell: " + now + " im Inventar (vorher " + countBeforeSell + ")"
-                                + (now < countBeforeSell ? " -> verkauft/eingestellt." : " -> unverändert."),
-                                now < countBeforeSell ? Formatting.GREEN : Formatting.YELLOW);
-                        if (now >= countBeforeSell) {
+                        // Verkauft, wenn die Menge zwischenzeitlich gesunken ist. Steht man in gedropptem
+                        // Zeug, wird das Item sofort wieder aufgesammelt: dann ist now == vorher, obwohl
+                        // der Verkauf geklappt hat. Deshalb zaehlt das Minimum waehrend des Wartens.
+                        boolean sold = minCountSeen < countBeforeSell || now < countBeforeSell;
+                        if (sold) {
+                            say("Nach /ah sell: verkauft/eingestellt (Inventar zwischenzeitlich "
+                                    + minCountSeen + ", jetzt " + now + ").", Formatting.GREEN);
+                            failedSells = 0;
+                        } else {
                             failedSells++;
-                            if (failedSells >= 2) {
-                                finish("Verkauf funktioniert nicht: Item ist nach /ah sell noch da (2 Versuche). "
-                                        + (lastServerMsg.isEmpty() ? "Der Server hat nichts geantwortet."
-                                        : "Server sagte: " + lastServerMsg), Formatting.RED);
+                            say("Nach /ah sell: Menge unverändert (" + now + ") [" + failedSells + "/10]",
+                                    Formatting.YELLOW);
+                            // Es koennte sofort wieder aufgesammelt worden sein, daher erst nach
+                            // 10 Versuchen in Folge stoppen (Endlosschleife vermeiden).
+                            if (failedSells >= 10) {
+                                finish("Verkauf funktioniert nicht: Menge blieb 10x unverändert. "
+                                        + "Letzte Chatzeile: " + lastServerMsg, Formatting.RED);
                                 return;
                             }
-                        } else {
-                            failedSells = 0;
                         }
                         if (cfg.macroRepeat && hasFullStack(p, cur.item())) {
                             // Die Inventarmenge ist kein sicherer Beleg dafuer, dass der Server
                             // den Verkaufsbefehl abgelehnt hat. Bei aktivierter Wiederholung das
                             // Item erneut einreihen; NEXT liest den Auktionspreis erneut und SELL
                             // sendet einen frischen /ah sell-Befehl.
-                            if (now >= countBeforeSell) {
-                                say("Inventarmenge unverändert; erneuter Versuch mit Preisprüfung für "
-                                        + cur.item().getName().getString() + ".", Formatting.YELLOW);
-                            }
                             queue.addFirst(cur);
                         }
                     }

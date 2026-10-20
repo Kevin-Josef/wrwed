@@ -6,19 +6,24 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.Enchantments;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -32,17 +37,25 @@ import java.util.Set;
 public final class SpawnerGuard {
     private SpawnerGuard() {}
 
-    private enum Phase { IDLE, MINING, LEAVING }
+    private enum Phase { IDLE, MINING, COLLECTING, LEAVING }
 
     /** Reichweite zum Abbauen (Abstand Auge -> Blockmitte). Bewusst etwas unter dem Server-Limit. */
     private static final double REACH = 4.4;
     private static final int SCAN = 5;
     private static final long TIMEOUT_MS = 60_000;
     /** Wartezeit zwischen erstem und zweitem Abbau (20 Ticks = 1 s). */
-    private static final int CONFIRM_WAIT_TICKS = 20;
+    private static final int CONFIRM_WAIT_TICKS = 6;
     /** Nach dem zweiten Abbau so lange auf das Verschwinden des Spawners warten. */
     private static final int VERIFY_TICKS = 20;
-    private static final int MAX_ATTEMPTS = 2;
+    private static final int MAX_ATTEMPTS = 4;
+    /** Maximale Dauer eines einzelnen Abbauvorgangs (8 s). */
+    private static final int BREAK_MAX_TICKS = 160;
+    /** Mindestwartezeit nach dem letzten Abbau, damit Drops erscheinen (1 s). */
+    private static final int COLLECT_MIN_TICKS = 20;
+    /** Maximale Wartezeit auf das Einsammeln (12 s). */
+    private static final int COLLECT_MAX_TICKS = 240;
+    private static int breakTicks;
+    private static int collectTicks;
 
     private enum Step { SNEAK, BREAK1, WAIT, BREAK2, VERIFY }
     private static Step step = Step.SNEAK;
@@ -83,7 +96,15 @@ public final class SpawnerGuard {
         sneakForced = true;
     }
 
+    private static void releaseKeys(MinecraftClient client) {
+        if (client != null && client.options != null) {
+            client.options.attackKey.setPressed(false);
+            client.options.forwardKey.setPressed(false);
+        }
+    }
+
     private static void releaseSneak(MinecraftClient client) {
+        releaseKeys(client);
         if (sneakForced && client != null && client.options != null) {
             client.options.sneakKey.setPressed(false);
         }
@@ -95,6 +116,7 @@ public final class SpawnerGuard {
         step = Step.SNEAK;
         stepTicks = 0;
         breakStarted = false;
+        breakTicks = 0;
         attempts = 0;
     }
 
@@ -144,6 +166,7 @@ public final class SpawnerGuard {
                 }
             }
             case MINING -> mine(client, p);
+            case COLLECTING -> collect(client, p);
             case LEAVING -> {
                 if (--leaveTicks <= 0) leave(client);
             }
@@ -179,8 +202,8 @@ public final class SpawnerGuard {
         if (current == null) {
             current = findSpawner(client, p);
             if (current == null) {
-                status = mined + " Spawner abgebaut, verlasse Server.";
-                startLeaving(client);
+                if (mined > 0) startCollecting(client);
+                else { status = "Keine Spawner abgebaut, verlasse Server."; startLeaving(client); }
                 return;
             }
         }
@@ -197,6 +220,7 @@ public final class SpawnerGuard {
                     step = Step.BREAK1;
                     stepTicks = 0;
                     breakStarted = false;
+        breakTicks = 0;
                 }
             }
             case BREAK1 -> {
@@ -208,10 +232,14 @@ public final class SpawnerGuard {
             }
             case WAIT -> {
                 status = "Spawner " + n + ": warte auf Bestätigung ...";
-                if (stepTicks >= CONFIRM_WAIT_TICKS) {
+                if (!isSpawner) {
+                    step = Step.VERIFY; // Einzelner Spawner: schon nach dem 1. Abbau weg
+                    stepTicks = 0;
+                } else if (stepTicks >= CONFIRM_WAIT_TICKS) {
                     step = isSpawner ? Step.BREAK2 : Step.VERIFY;
                     stepTicks = 0;
                     breakStarted = false;
+        breakTicks = 0;
                 }
             }
             case BREAK2 -> {
@@ -233,24 +261,82 @@ public final class SpawnerGuard {
                         step = Step.BREAK1; // erneut versuchen (Bestaetigung evtl. abgelaufen)
                         stepTicks = 0;
                         breakStarted = false;
+        breakTicks = 0;
                     }
                 }
             }
         }
     }
 
-    /** Fuehrt einen Abbauvorgang aus. true, sobald der Block fertig abgebaut wurde. */
+    /**
+     * Haelt die Angriffstaste gedrueckt und zielt auf den Spawner, bis der Abbau fertig ist
+     * (wie ein Spieler mit gehaltener linker Maustaste). true, sobald ein Abbau beendet wurde.
+     * Ein einzelner Aufruf pro Tick reicht nicht: Minecraft bricht den Abbau sonst im naechsten
+     * Tick selbst wieder ab (das war das "Antippen").
+     */
     private static boolean breakTick(MinecraftClient client, ClientPlayerEntity p) {
-        if (breakStarted && !client.interactionManager.isBreakingBlock()) {
-            return true; // Fortschritt erreicht 100 %, Vorgang beendet
+        breakTicks++;
+        lookAt(p, Vec3d.ofCenter(current));
+        HitResult h = client.crosshairTarget;
+        boolean aimed = h instanceof BlockHitResult bhr && bhr.getBlockPos().equals(current);
+        client.options.attackKey.setPressed(aimed); // nie einen anderen Block treffen
+
+        if (client.interactionManager.isBreakingBlock()) {
+            breakStarted = true;
+        } else if (breakStarted) {
+            client.options.attackKey.setPressed(false);
+            return true; // Fortschritt 100 %: dieser Abbau ist fertig
         }
-        Vec3d eye = p.getEyePos();
-        Direction side = Direction.getFacing(
-                eye.x - (current.getX() + 0.5), eye.y - (current.getY() + 0.5), eye.z - (current.getZ() + 0.5));
-        client.interactionManager.updateBlockBreakingProgress(current, side);
-        p.swingHand(Hand.MAIN_HAND);
-        breakStarted = true;
+        if (breakTicks > BREAK_MAX_TICKS) {
+            client.options.attackKey.setPressed(false);
+            return true; // Zeitlimit; VERIFY entscheidet, ob es nochmal versucht wird
+        }
         return false;
+    }
+
+    private static void lookAt(ClientPlayerEntity p, Vec3d t) {
+        Vec3d e = p.getEyePos();
+        double dx = t.x - e.x, dy = t.y - e.y, dz = t.z - e.z;
+        double h = Math.sqrt(dx * dx + dz * dz);
+        p.setYaw((float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0));
+        p.setPitch((float) -Math.toDegrees(Math.atan2(dy, h)));
+    }
+
+    private static void startCollecting(MinecraftClient client) {
+        releaseKeys(client);
+        phase = Phase.COLLECTING;
+        collectTicks = 0;
+        status = mined + " Spawner abgebaut, sammle Drops ein ...";
+    }
+
+    /** Wartet, bis alle gedroppten Spawner im Inventar sind (laeuft ggf. zu ihnen), erst dann Verlassen. */
+    private static void collect(MinecraftClient client, ClientPlayerEntity p) {
+        collectTicks++;
+        holdSneak(client); // schleichend laufen: kein Absturz vom Rand
+        List<ItemEntity> items = client.world.getEntitiesByClass(ItemEntity.class,
+                p.getBoundingBox().expand(12), e -> e.getStack().isOf(Items.SPAWNER));
+        if (collectTicks >= COLLECT_MIN_TICKS && items.isEmpty()) {
+            status = mined + " Spawner abgebaut und eingesammelt, verlasse Server.";
+            startLeaving(client);
+            return;
+        }
+        if (collectTicks > COLLECT_MAX_TICKS) {
+            status = "Einsammeln dauerte zu lange (" + items.size() + " Drops übrig), verlasse Server.";
+            startLeaving(client);
+            return;
+        }
+        if (items.isEmpty()) { client.options.forwardKey.setPressed(false); return; }
+        ItemEntity nearest = items.get(0);
+        for (ItemEntity it : items) if (p.squaredDistanceTo(it) < p.squaredDistanceTo(nearest)) nearest = it;
+        status = "Sammle Spawner ein (" + items.size() + " Drop(s) in der Nähe) ...";
+        double dx = nearest.getX() - p.getX(), dz = nearest.getZ() - p.getZ();
+        if (dx * dx + dz * dz > 0.6 * 0.6) {
+            p.setYaw((float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0));
+            p.setPitch(20f);
+            client.options.forwardKey.setPressed(true);
+        } else {
+            client.options.forwardKey.setPressed(false);
+        }
     }
 
     private static void leave(MinecraftClient client) {
