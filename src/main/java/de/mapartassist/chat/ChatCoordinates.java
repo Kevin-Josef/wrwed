@@ -15,7 +15,7 @@ public final class ChatCoordinates {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.world == null || sender == null) return;
 
-            PlayerEntity player = client.world.getPlayerByUuid(sender.getId());
+           PlayerEntity player = client.world.getPlayerByUuid(sender.id());
             Text line;
             if (player != null) {
                 int x = (int) Math.floor(player.getX());
