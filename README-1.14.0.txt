@@ -69,3 +69,8 @@ Liste im Inventar sind, und startet dann von selbst einen Verkauf.
 Verkaufs-Makro bricht nicht mehr ab: Oeffnet sich /sell nicht, schliesst sich das Menue oder nimmt es gerade nichts an,
 wartet das Makro kurz (0,5 s, bei wiederholten Fehlern bis 5 s) und versucht es von selbst neu. Es endet nur, wenn
 nichts mehr aus der Liste im Inventar ist, bei Stopp, oder wenn das Menue 12 Mal hintereinander gar nichts annimmt.
+
+==== 1.15.5 ====
+Verkaufs-Makro: "Dauerbetrieb (immer)" ersetzt Automatik + Intervall. Jeder Tick wird geprueft; sobald ein Item aus
+der Liste im Inventar liegt, wird sofort /sell geoeffnet, alles hineingeschoben und geschlossen. Keine Wartezeiten
+mehr (Fehlversuche werden nach 2 Ticks erneut probiert). Aus: Schalter oder "Stopp".

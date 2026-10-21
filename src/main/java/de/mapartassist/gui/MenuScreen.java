@@ -949,15 +949,13 @@ public class MenuScreen extends Screen {
             clearAndInit();
         }));
         controls.add(new Tog(rx - 6, cy + 52, rw + 12, "Wiederholen, bis leer", () -> cfg.cellRepeat, v -> { cfg.cellRepeat = v; ModConfig.save(); }));
-        controls.add(new Tog(rx - 6, cy + 74, rw + 12, "Automatisch starten", () -> cfg.cellAuto, v -> { cfg.cellAuto = v; ModConfig.save(); }));
-        controls.add(new Sld(rx + 2, cy + 98, rw - 4, "Auto-Prüfung alle", " s", 5, 300,
-                () -> cfg.cellInterval, v -> cfg.cellInterval = v));
+        controls.add(new Tog(rx - 6, cy + 74, rw + 12, "Dauerbetrieb (immer)", () -> cfg.cellAuto, v -> { cfg.cellAuto = v; ModConfig.save(); }));
         int hw = (rw - 4) / 2;
-        controls.add(new Btn(rx, cy + 130, hw, 20, () -> "Jetzt verkaufen", () -> {
+        controls.add(new Btn(rx, cy + 104, hw, 20, () -> "Jetzt verkaufen", () -> {
             close();
             SellMacro.start(false);
         }).enabledIf(() -> !SellMacro.running() && !ModConfig.get().cellItems.isEmpty()));
-        controls.add(new Btn(rx + hw + 4, cy + 130, hw, 20, () -> "Stopp", SellMacro::stop)
+        controls.add(new Btn(rx + hw + 4, cy + 104, hw, 20, () -> "Stopp", SellMacro::stop)
                 .enabledIf(SellMacro::running));
     }
 
@@ -1705,8 +1703,8 @@ public class MenuScreen extends Screen {
             text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
         }
         int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
-        drawWrapped(ctx, "Legt alles aus der Liste auf einmal ins /sell-Menü und schließt es.",
-                rx, cy + 156, rw, 0xFF777783);
+        drawWrapped(ctx, "Dauerbetrieb: Sobald ein Item aus der Liste im Inventar ist, wird sofort alles ins /sell-Menü gelegt und verkauft, ohne Pause und ohne Timer. Ausschalten: Schalter oder Stopp.",
+                rx, cy + 132, rw, 0xFF777783);
         text(ctx, "Befehl: /sellmacro  (Stopp: /sellmacro stop)", rx, cy + 179, 0xFFCCCCCC);
         String ms = SellMacro.running() || cellStatus.isEmpty() ? SellMacro.status : cellStatus;
         text(ctx, ms == null ? "" : shorten(ms, 78), cx, top + H - 24, 0xFFFFD866);

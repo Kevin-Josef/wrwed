@@ -37,8 +37,7 @@ public final class SellMacro {
     private static int timer;
     private static final Deque<Integer> queue = new ArrayDeque<>();
     private static int movedItems, cycles, totalBefore, failStreak, stallStreak, retryTicks;
-    private static int autoTimer = 0;
-    public static String status = "";
+        public static String status = "";
 
     public static boolean running() { return state != State.IDLE; }
 
@@ -128,8 +127,8 @@ public final class SellMacro {
         if (p != null && screenOpen(mc, p)) p.closeHandledScreen();
         queue.clear();
         failStreak++;
-        retryTicks = Math.min(100, 20 * (1 << Math.min(failStreak - 1, 3)));
-        status = why + " - neuer Versuch in " + String.format(java.util.Locale.ROOT, "%.1f", retryTicks / 20f) + " s";
+        retryTicks = 2;
+        status = why + " - versuche sofort erneut";
         state = State.RETRY;
         timer = 0;
     }
@@ -164,17 +163,12 @@ public final class SellMacro {
         ClientPlayerEntity p = client.player;
         ModConfig cfg = ModConfig.get();
         if (state == State.IDLE) {
-            if (!cfg.cellAuto || p == null || client.world == null) {
-                autoTimer = 0;
-                return;
-            }
-            if (++autoTimer >= cfg.cellInterval * 20) {
-                autoTimer = 0;
-                boolean busy = AuctionMacro.running() || AutoRepair.running()
-                        || MovementRecorder.state != MovementRecorder.State.IDLE
-                        || client.currentScreen != null;
-                if (!busy) start(true);
-            }
+            if (!cfg.cellAuto || p == null || client.world == null) return;
+            boolean busy = AuctionMacro.running() || AutoRepair.running()
+                    || MovementRecorder.state != MovementRecorder.State.IDLE
+                    || client.currentScreen != null;
+            // Dauerbetrieb: Sobald etwas aus der Liste im Inventar liegt, sofort verkaufen (kein Timer).
+            if (!busy && countSellable(p) > 0) start(true);
             return;
         }
         if (p == null || client.world == null || client.interactionManager == null) {
@@ -184,7 +178,7 @@ public final class SellMacro {
         timer++;
         switch (state) {
             case OPEN -> {
-                if (screenOpen(client, p) && timer >= 2) {
+                if (screenOpen(client, p) && timer >= 1) {
                     Set<Item> f = filter();
                     queue.clear();
                     for (Slot s : p.currentScreenHandler.slots) {
@@ -201,7 +195,7 @@ public final class SellMacro {
                     totalBefore = sellableTotal(p);
                     state = State.MOVE;
                     timer = 0;
-                } else if (timer > 60) {
+                } else if (timer > 40) {
                     retryLater("/sell hat sich nicht geöffnet");
                 }
             }
@@ -219,7 +213,7 @@ public final class SellMacro {
                 }
                 int moved = totalBefore - sellableTotal(p);
                 if (moved <= 0) {
-                    if (++stallStreak >= 12) {
+                    if (++stallStreak >= 100) {
                         fail("Das Verkaufsmenü nimmt dauerhaft nichts an. Abgebrochen.");
                     } else {
                         retryLater("Verkaufsmenü nimmt gerade nichts an");
@@ -235,14 +229,13 @@ public final class SellMacro {
                 timer = 0;
             }
             case CLOSE -> {
-                if (timer >= 2) {
+                if (timer >= 1) {
                     p.closeHandledScreen();
                     state = State.DELAY;
                     timer = 0;
                 }
             }
             case DELAY -> {
-                if (timer < 6) return;
                 if (cfg.cellRepeat && client.currentScreen == null && countSellable(p) > 0) {
                     // Es liegt (wieder) etwas aus der Liste im Inventar: naechster Durchgang.
                     p.networkHandler.sendChatCommand("sell");
