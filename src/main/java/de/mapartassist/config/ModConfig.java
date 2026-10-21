@@ -38,6 +38,8 @@ public class ModConfig {
     /** /sell-Makro: Filterliste, Automatik und Intervall (Sekunden). */
     public List<String> cellItems = new ArrayList<>();
     public boolean cellAuto = false;
+    /** Nach jedem Verkauf weitermachen, solange noch Items aus der Liste im Inventar sind. */
+    public boolean cellRepeat = true;
     public int cellInterval = 30;
     /** Auto-Reparatur der Spitzhacke (XP-Flaschen aus /shop). */
     public boolean repairEnabled = false;

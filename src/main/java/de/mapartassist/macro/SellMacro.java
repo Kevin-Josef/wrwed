@@ -36,7 +36,7 @@ public final class SellMacro {
     private static State state = State.IDLE;
     private static int timer;
     private static final Deque<Integer> queue = new ArrayDeque<>();
-    private static int movedItems, movedStacks, failedMoves;
+    private static int movedItems, cycles, totalBefore;
     private static int autoTimer = 0;
     public static String status = "";
 
@@ -70,6 +70,17 @@ public final class SellMacro {
         return n;
     }
 
+    /** Summe aller Items aus der Filterliste im Inventar (Stueckzahl). */
+    private static int sellableTotal(ClientPlayerEntity p) {
+        Set<Item> f = filter();
+        int n = 0;
+        for (int i = 0; i < 36; i++) {
+            ItemStack st = p.getInventory().getStack(i);
+            if (!st.isEmpty() && f.contains(st.getItem())) n += st.getCount();
+        }
+        return n;
+    }
+
     private static boolean screenOpen(MinecraftClient c, ClientPlayerEntity p) {
         return c.currentScreen instanceof HandledScreen<?> && p.currentScreenHandler != p.playerScreenHandler;
     }
@@ -91,8 +102,7 @@ public final class SellMacro {
             return;
         }
         movedItems = 0;
-        movedStacks = 0;
-        failedMoves = 0;
+        cycles = 0;
         queue.clear();
         p.networkHandler.sendChatCommand("sell");
         state = State.OPEN;
@@ -152,8 +162,9 @@ public final class SellMacro {
         timer++;
         switch (state) {
             case OPEN -> {
-                if (screenOpen(client, p) && timer >= 6) {
+                if (screenOpen(client, p) && timer >= 2) {
                     Set<Item> f = filter();
+                    queue.clear();
                     for (Slot s : p.currentScreenHandler.slots) {
                         if (!(s.inventory instanceof PlayerInventory)) continue;
                         ItemStack st = s.getStack();
@@ -163,6 +174,7 @@ public final class SellMacro {
                         fail("Keine passenden Items gefunden.");
                         return;
                     }
+                    totalBefore = sellableTotal(p);
                     state = State.MOVE;
                     timer = 0;
                 } else if (timer > 80) {
@@ -174,32 +186,42 @@ public final class SellMacro {
                     fail("Das Menü wurde geschlossen. Abgebrochen.");
                     return;
                 }
-                if (timer < 2) return;
-                timer = 0;
-                Integer id = queue.poll();
-                if (id == null) {
-                    state = State.CLOSE;
-                    timer = 0;
+                // Alles in einem einzigen Tick hineinschieben (Shift-Klick auf jeden passenden Stack).
+                int syncId = p.currentScreenHandler.syncId;
+                while (!queue.isEmpty()) {
+                    int id = queue.poll();
+                    if (p.currentScreenHandler.slots.get(id).getStack().isEmpty()) continue;
+                    client.interactionManager.clickSlot(syncId, id, 0, SlotActionType.QUICK_MOVE, p);
+                }
+                int moved = totalBefore - sellableTotal(p);
+                if (moved <= 0) {
+                    fail("Das Verkaufsmenü nimmt nichts mehr an (voll?). Abgebrochen.");
                     return;
                 }
-                Slot slot = p.currentScreenHandler.slots.get(id);
-                ItemStack st = slot.getStack();
-                if (st.isEmpty()) return;
-                int before = st.getCount();
-                client.interactionManager.clickSlot(p.currentScreenHandler.syncId, id, 0, SlotActionType.QUICK_MOVE, p);
-                movedItems += before;
-                movedStacks++;
+                movedItems += moved;
+                cycles++;
+                status = "Verkaufe … Durchgang " + cycles + ", bisher " + movedItems + " Items";
+                state = State.CLOSE;
+                timer = 0;
             }
             case CLOSE -> {
-                if (timer >= 4) {
+                if (timer >= 2) {
                     p.closeHandledScreen();
-                    say("Verkauft: " + movedStacks + " Stack(s) (" + movedItems + " Items) ins Menü gelegt.", Formatting.GREEN);
                     state = State.DELAY;
                     timer = 0;
                 }
             }
             case DELAY -> {
-                if (timer >= 10) state = State.IDLE;
+                if (timer < 4) return;
+                if (cfg.cellRepeat && client.currentScreen == null && countSellable(p) > 0) {
+                    // Es liegt (wieder) etwas aus der Liste im Inventar: naechster Durchgang.
+                    p.networkHandler.sendChatCommand("sell");
+                    state = State.OPEN;
+                    timer = 0;
+                } else {
+                    say("Fertig: " + movedItems + " Items in " + cycles + " Durchgang/Durchgängen verkauft.", Formatting.GREEN);
+                    state = State.IDLE;
+                }
             }
             default -> { }
         }

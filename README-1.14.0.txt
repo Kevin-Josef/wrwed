@@ -56,3 +56,11 @@ Flaschen da sind (1-4 Stacks einstellbar).
 Freecam + Recorder: Eine laufende Wiedergabe bleibt aktiv, wenn man die Freecam einschaltet. Waehrend der
 Spiel-Logik ist der echte Spieler die Kamera (Abbauen/Zielen klappt), gezeigt wird die Freecam-Ansicht.
 Die Freecam startet jetzt 3 Bloecke hinter dem Spieler, damit man ihn sofort sieht.
+
+==== 1.15.3 ====
+Verkaufs-Makro: Alle passenden Stacks werden in einem einzigen Tick per Shift-Klick ins /sell-Menue
+geschoben (kein Einzelklicken mehr). Mit "Wiederholen, bis leer" laeuft das Makro Durchgang um Durchgang,
+solange noch Items aus der Liste im Inventar sind (Stopp: Button oder /sellmacro stop). Bricht ab, wenn
+das Verkaufsmenue nichts mehr annimmt.
+"Auto-Pruefung alle X s": Bei "Automatisch starten" schaut die Mod alle X Sekunden nach, ob Items aus der
+Liste im Inventar sind, und startet dann von selbst einen Verkauf.
