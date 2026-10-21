@@ -72,21 +72,10 @@ public final class Freecam {
     }
 
     private static void place(boolean snap) {
-        double ny = y - eyeOff;
-        cam.setPosition(x, ny, z);
-        cam.setYaw(yaw);
-        cam.setPitch(pitch);
+        // setzt Position, Blickrichtung und die "vorherigen" Werte gleichzeitig (kein Interpolations-Ruckeln)
+        cam.refreshPositionAndAngles(x, y - eyeOff, z, yaw, pitch);
         cam.setHeadYaw(yaw);
         cam.setBodyYaw(yaw);
-        if (snap) {
-            cam.prevX = x; cam.prevY = ny; cam.prevZ = z;
-            cam.lastRenderX = x; cam.lastRenderY = ny; cam.lastRenderZ = z;
-        } else {
-            cam.prevX = x; cam.prevY = ny; cam.prevZ = z;
-            cam.lastRenderX = x; cam.lastRenderY = ny; cam.lastRenderZ = z;
-        }
-        cam.prevYaw = yaw;
-        cam.prevPitch = pitch;
     }
 
     private static boolean down(long w, int key) {
