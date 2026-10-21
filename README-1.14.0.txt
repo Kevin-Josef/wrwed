@@ -29,3 +29,30 @@ SCHEMATIC-FORTSCHRITT (Litematica > Fortschritt)
 HINWEIS
 - Nicht gebaut/getestet (kein Gradle hier). Bitte bauen und Fehlermeldungen schicken.
 - Prüfe die Regeln deines Servers: Freecam und Wiederhol-Makros sind auf manchen Servern verboten.
+
+==== 1.15.0 ====
+VERKAUFS-MAKRO (/sell) - Makros > Verkaufs-Makro
+- Filterliste wie beim Auktions-Makro (Item aus der Hand hinzufuegen, mit X entfernen).
+- "Jetzt verkaufen" oder /sellmacro: oeffnet /sell, schiebt alle Items aus der Liste hinein
+  (Shift-Klick) und schliesst das Menue. Beim Schliessen wird verkauft.
+- "Automatisch verkaufen" mit Intervall (5-300 s). Laeuft nicht, solange ein Menue offen ist oder der
+  Recorder aufnimmt/abspielt.
+
+AUTO-REPARATUR - Makros > Auto-Reparatur
+- Erkennt, wenn die Spitzhacke in deiner Hand fast kaputt ist (Schwelle einstellbar).
+- Oeffnet /shop, klickt die Kategorie (Name einstellbar, Standard "Ausruestung"), kauft XP-Flaschen
+  (1-4 Stacks), legt sie in die Zweithand und wirft sie nach unten. Mending repariert die Spitzhacke.
+- Danach wird die Blickrichtung/der Slot wiederhergestellt und eine laufende Aufnahme optional fortgesetzt.
+- Wird die Spitzhacke nicht repariert (kein Mending), schaltet sich die Auto-Reparatur aus.
+- Die Shop-Schritte sind allgemein gehalten (Suche nach Namen). Klappt etwas nicht, steht der
+  Menue-Inhalt in config/mapartassist/shop-dump.txt. Test: /repairmacro, Stopp: /repairmacro stop.
+
+==== 1.15.1 ====
+Auto-Reparatur passend zum HugoSMP-Shop: /shop -> Totem (Ausruestung) -> XP-Flasche -> im Kaufen-Fenster
+"=64" (gruenes Glas rechts) -> gruenes Glas unten (Bestaetigen). Wird pro Stack wiederholt, bis genug
+Flaschen da sind (1-4 Stacks einstellbar).
+
+==== 1.15.2 ====
+Freecam + Recorder: Eine laufende Wiedergabe bleibt aktiv, wenn man die Freecam einschaltet. Waehrend der
+Spiel-Logik ist der echte Spieler die Kamera (Abbauen/Zielen klappt), gezeigt wird die Freecam-Ansicht.
+Die Freecam startet jetzt 3 Bloecke hinter dem Spieler, damit man ihn sofort sieht.

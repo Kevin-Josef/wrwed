@@ -3,7 +3,9 @@ package de.mapartassist;
 import de.mapartassist.cam.Freecam;
 import de.mapartassist.combat.CombatLock;
 import de.mapartassist.litematica.SchematicProgress;
+import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
+import de.mapartassist.macro.SellMacro;
 import de.mapartassist.chat.ChatCoordinates;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
@@ -104,11 +106,23 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.START_CLIENT_TICK.register(MovementRecorder::tickStart);
         ClientTickEvents.START_CLIENT_TICK.register(Freecam::tickStart);
         ClientTickEvents.END_CLIENT_TICK.register(MovementRecorder::tickEnd);
+        ClientTickEvents.END_CLIENT_TICK.register(Freecam::tickEnd);
         ClientTickEvents.END_CLIENT_TICK.register(mc -> SchematicProgress.tick(mc, tickCounter));
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
         ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(SellMacro::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(AutoRepair::tick);
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
         ClientTickEvents.END_CLIENT_TICK.register(SpawnerGuard::tick);
+        // /sellmacro = /sell-Makro, /repairmacro = Auto-Reparatur (Test). Die Server-Befehle /sell und /shop bleiben frei.
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            dispatcher.register(ClientCommandManager.literal("sellmacro")
+                    .executes(c -> { SellMacro.start(false); return 1; })
+                    .then(ClientCommandManager.literal("stop").executes(c -> { SellMacro.stop(); return 1; })));
+            dispatcher.register(ClientCommandManager.literal("repairmacro")
+                    .executes(c -> { AutoRepair.start(true); return 1; })
+                    .then(ClientCommandManager.literal("stop").executes(c -> { AutoRepair.stop(); return 1; })));
+        });
         // /ahmacro = Auktions-Makro (bewusst NICHT /ah, damit /ah und /ah sell des Servers normal funktionieren)
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 dispatcher.register(ClientCommandManager.literal("ahmacro")

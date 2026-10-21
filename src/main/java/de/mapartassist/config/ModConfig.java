@@ -35,6 +35,16 @@ public class ModConfig {
     public String menuTitle = DEFAULT_TITLE;
     /** Chat-Koordinaten (Admin-Panel): bei Chatnachrichten die Position des Absenders anzeigen. */
     public boolean chatCoords = false;
+    /** /sell-Makro: Filterliste, Automatik und Intervall (Sekunden). */
+    public List<String> cellItems = new ArrayList<>();
+    public boolean cellAuto = false;
+    public int cellInterval = 30;
+    /** Auto-Reparatur der Spitzhacke (XP-Flaschen aus /shop). */
+    public boolean repairEnabled = false;
+    public int repairThreshold = 30;
+    public int repairStacks = 2;
+    public boolean repairResume = true;
+    public String repairCategory = "Ausrüstung";
     /** Freecam-Geschwindigkeit in Bloecken pro Sekunde. */
     public int freecamSpeed = 8;
     /** Bewegungs-Recorder: endlos wiederholen / Anzahl Wiederholungen / Blickrichtung relativ zum Start. */
@@ -124,6 +134,11 @@ public class ModConfig {
                 if (loaded.spawnerGuardCommandText == null) loaded.spawnerGuardCommandText = "/spawn";
                 // Titel ist fest und nicht mehr aenderbar
                 loaded.menuTitle = DEFAULT_TITLE;
+                if (loaded.cellItems == null) loaded.cellItems = new ArrayList<>();
+                if (loaded.repairCategory == null || loaded.repairCategory.isBlank()) loaded.repairCategory = "Ausrüstung";
+                loaded.cellInterval = Math.max(5, Math.min(300, loaded.cellInterval));
+                loaded.repairThreshold = Math.max(1, Math.min(500, loaded.repairThreshold));
+                loaded.repairStacks = Math.max(1, Math.min(4, loaded.repairStacks));
                 if (loaded.progressExcluded == null) loaded.progressExcluded = new ArrayList<>();
                 if (loaded.selectedRecording == null) loaded.selectedRecording = "";
                 loaded.freecamSpeed = Math.max(1, Math.min(40, loaded.freecamSpeed));

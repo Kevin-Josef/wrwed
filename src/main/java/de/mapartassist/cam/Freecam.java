@@ -40,7 +40,8 @@ public final class Freecam {
 
     private static void start(MinecraftClient mc) {
         if (active || mc.player == null || mc.world == null) return;
-        MovementRecorder.stopAll(mc);
+        // Eine laufende Wiedergabe (Recorder) bleibt absichtlich aktiv.
+        if (MovementRecorder.state == MovementRecorder.State.RECORDING) MovementRecorder.stopAll(mc);
         ClientPlayerEntity p = mc.player;
         cam = new ArmorStandEntity(EntityType.ARMOR_STAND, mc.world);
         cam.setInvisible(true);
@@ -50,7 +51,10 @@ public final class Freecam {
         yaw = savedYaw = p.getYaw();
         pitch = savedPitch = p.getPitch();
         Vec3d eye = p.getEyePos();
-        x = eye.x; y = eye.y; z = eye.z;
+        double yr0 = Math.toRadians(yaw);
+        x = eye.x + Math.sin(yr0) * 3.0;
+        y = eye.y + 0.6;
+        z = eye.z - Math.cos(yr0) * 3.0;
         place(true);
         mc.setCameraEntity(cam);
         active = true;
@@ -82,22 +86,41 @@ public final class Freecam {
         return GLFW.glfwGetKey(w, key) == GLFW.GLFW_PRESS;
     }
 
-    /** Am Anfang jedes Ticks: Spielersteuerung sperren, solange die Kamera frei fliegt. */
+    /** Von der Wiedergabe (Recorder) gesetzte Blickrichtung uebernehmen, damit sie nicht als Mausbewegung zaehlt. */
+    public static void syncSaved(float newYaw, float newPitch) {
+        if (!active) return;
+        savedYaw = newYaw;
+        savedPitch = newPitch;
+    }
+
+    /**
+     * Am Anfang jedes Ticks: Waehrend der Spiel-Logik (Zielerfassung, Abbauen, Benutzen) ist der echte Spieler die
+     * Kamera. Dadurch zielt und baut der Spieler weiter normal ab; nur die Darstellung zeigt die Freecam.
+     */
     public static void tickStart(MinecraftClient mc) {
         if (!active) return;
-        GameOptions o = mc.options;
-        o.forwardKey.setPressed(false);
-        o.backKey.setPressed(false);
-        o.leftKey.setPressed(false);
-        o.rightKey.setPressed(false);
-        o.jumpKey.setPressed(false);
-        o.sneakKey.setPressed(false);
-        o.sprintKey.setPressed(false);
-        o.attackKey.setPressed(false);
-        o.useKey.setPressed(false);
-        while (o.attackKey.wasPressed()) { /* verwerfen */ }
-        while (o.useKey.wasPressed()) { /* verwerfen */ }
+        if (mc.player != null) mc.setCameraEntity(mc.player);
+        boolean replay = MovementRecorder.state == MovementRecorder.State.PLAYING;
+        if (!replay) {
+            GameOptions o = mc.options;
+            o.forwardKey.setPressed(false);
+            o.backKey.setPressed(false);
+            o.leftKey.setPressed(false);
+            o.rightKey.setPressed(false);
+            o.jumpKey.setPressed(false);
+            o.sneakKey.setPressed(false);
+            o.sprintKey.setPressed(false);
+            o.attackKey.setPressed(false);
+            o.useKey.setPressed(false);
+            while (o.attackKey.wasPressed()) { /* verwerfen */ }
+            while (o.useKey.wasPressed()) { /* verwerfen */ }
+        }
         update(mc);
+    }
+
+    /** Am Ende jedes Ticks: wieder die Freecam-Kamera zeigen. */
+    public static void tickEnd(MinecraftClient mc) {
+        if (active && cam != null && mc.player != null && mc.world == world) mc.setCameraEntity(cam);
     }
 
     /** Pro Frame und pro Tick aufrufbar (arbeitet mit echter Zeitdifferenz). */

@@ -7,7 +7,9 @@ import de.mapartassist.cape.CapePreview;
 import de.mapartassist.cam.Freecam;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.litematica.SchematicProgress;
+import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
+import de.mapartassist.macro.SellMacro;
 import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.client.gui.DrawContext;
@@ -46,9 +48,11 @@ public class MenuScreen extends Screen {
     private enum Tab {
         HOME(null, "Startseite"),
         AUCTION("Makros", "Auktions-Makro"),
+        SELL("Makros", "Verkaufs-Makro"),
         HT1("Makros", "HT1 Combat Lock"),
         SPAWNER("Makros", "Spawner-Schutz"),
         RECORDER("Makros", "Bewegungs-Recorder"),
+        REPAIR("Makros", "Auto-Reparatur"),
         CAPES("Kosmetik", "Capes"),
         CREATOR("Kosmetik", "Cape Creator"),
         CALC(null, "Taschenrechner"),
@@ -78,6 +82,8 @@ public class MenuScreen extends Screen {
     private static boolean dropAsElytra = false;
     private static int macroScroll = 0;
     private static int recScroll = 0;
+    private static int sellScroll = 0;
+    private static String cellStatus = "";
     private static int progScroll = 0;
     private int progSeen = -1;
     private static String macroStatus = "";
@@ -463,6 +469,42 @@ public class MenuScreen extends Screen {
         }
     }
 
+    private class CellRow extends Control {
+        final String id;
+
+        CellRow(int x, int y, int w, String id) {
+            this.x = x; this.y = y; this.w = w; this.h = 26; this.id = id;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            ctx.fill(x, y, x + w, y + h, mix(0xFF262631, alpha(Theme.accent(), 0.25f), hover * 0.6f));
+            Item it = null;
+            try {
+                it = Registries.ITEM.get(Identifier.of(id));
+            } catch (Exception ignored) {
+            }
+            if (it != null) {
+                ctx.drawItem(new ItemStack(it), x + 6, y + 5);
+                text(ctx, it.getName().getString(), x + 30, y + 9, 0xFFFFFFFF);
+            } else {
+                text(ctx, id, x + 30, y + 9, 0xFFAA6666);
+            }
+            boolean overX = mx >= x + w - 24 && mx < x + w && my >= y && my < y + h;
+            text(ctx, "✕", x + w - 16, y + 9, overX ? 0xFFFF6666 : 0xFF888890);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            if (mx >= x + w - 24) {
+                ModConfig.get().cellItems.remove(id);
+                ModConfig.save();
+                clearAndInit();
+            }
+        }
+    }
+
     private class RecRow extends Control {
         final MovementRecorder.Rec r;
 
@@ -607,6 +649,8 @@ public class MenuScreen extends Screen {
             case HT1 -> buildHt1();
             case SPAWNER -> buildSpawner();
             case RECORDER -> buildRecorder();
+            case SELL -> buildSell();
+            case REPAIR -> buildRepair();
             case PROGRESS -> buildProgress();
             case CALC -> buildCalc();
             case ADMIN_LOGIN -> buildAdminLogin();
@@ -627,10 +671,11 @@ public class MenuScreen extends Screen {
     private record Group(String title, int row, int side, Tab[] tabs) {}
 
     private static final Group[] GROUPS = {
-            new Group("Makros", 0, -1, new Tab[]{Tab.AUCTION, Tab.HT1, Tab.SPAWNER, Tab.RECORDER}),
-            new Group("Kosmetik", 1, 0, new Tab[]{Tab.CAPES, Tab.CREATOR}),
-            new Group("Litematica", 1, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
-            new Group("Extras", 2, 0, new Tab[]{Tab.CALC, Tab.SETTINGS}),
+            new Group("Verkauf", 0, 0, new Tab[]{Tab.AUCTION, Tab.SELL}),
+            new Group("Litematica", 0, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
+            new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
+            new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.CREATOR}),
+            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.SETTINGS}),
     };
     private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
@@ -640,6 +685,8 @@ public class MenuScreen extends Screen {
     private static Item tileItem(Tab t) {
         return switch (t) {
             case AUCTION -> Items.GOLD_INGOT;
+            case SELL -> Items.EMERALD;
+            case REPAIR -> Items.DIAMOND_PICKAXE;
             case HT1 -> Items.IRON_SWORD;
             case SPAWNER -> Items.SPAWNER;
             case RECORDER -> Items.CLOCK;
@@ -655,6 +702,8 @@ public class MenuScreen extends Screen {
     private static String tileName(Tab t) {
         return switch (t) {
             case RECORDER -> "Recorder";
+            case SELL -> "Verkaufs-Makro";
+            case REPAIR -> "Auto-Reparatur";
             case PROGRESS -> "Fortschritt";
             case CREATOR -> "Creator";
             case CALC -> "Rechner";
@@ -678,6 +727,8 @@ public class MenuScreen extends Screen {
         ModConfig c = ModConfig.get();
         return switch (t) {
             case AUCTION -> AuctionMacro.running() ? "LÄUFT" : "AUS";
+            case SELL -> SellMacro.running() ? "LÄUFT" : c.cellAuto ? "AUTO" : "AUS";
+            case REPAIR -> AutoRepair.running() ? "LÄUFT" : c.repairEnabled ? "AN" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
             case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
             case MAPART -> c.autoPlace ? "AN" : "AUS";
@@ -861,6 +912,79 @@ public class MenuScreen extends Screen {
 
     private static String shorten(String s, int max) {
         return s.length() <= max ? s : s.substring(0, max - 1) + "…";
+    }
+
+    private static final int SELL_ROWS = 5;
+
+    private void buildSell() {
+        ModConfig cfg = ModConfig.get();
+        List<String> items = cfg.cellItems;
+        int maxScroll = Math.max(0, items.size() - SELL_ROWS);
+        sellScroll = Math.max(0, Math.min(sellScroll, maxScroll));
+        for (int i = 0; i < SELL_ROWS; i++) {
+            int idx = sellScroll + i;
+            if (idx >= items.size()) break;
+            controls.add(new CellRow(cx + 6, cy + 26 + i * 28, LIST_W - 12, items.get(idx)));
+        }
+        int ay = cy + 26 + SELL_ROWS * 28 + 2;
+        controls.add(new Btn(cx + 6, ay, 28, 18, () -> "▲", () -> { sellScroll--; clearAndInit(); })
+                .enabledIf(() -> sellScroll > 0));
+        controls.add(new Btn(cx + 38, ay, 28, 18, () -> "▼", () -> { sellScroll++; clearAndInit(); })
+                .enabledIf(() -> sellScroll < maxScroll));
+
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        controls.add(new Btn(rx, cy + 26, rw, 20, () -> "Item aus der Hand hinzufügen", () -> {
+            if (client == null || client.player == null || client.player.getMainHandStack().isEmpty()) {
+                cellStatus = "Nimm erst ein Item in die Hand.";
+                return;
+            }
+            String id = Registries.ITEM.getId(client.player.getMainHandStack().getItem()).toString();
+            if (cfg.cellItems.contains(id)) {
+                cellStatus = "Ist schon in der Liste.";
+                return;
+            }
+            cfg.cellItems.add(id);
+            ModConfig.save();
+            cellStatus = "Hinzugefügt: " + client.player.getMainHandStack().getName().getString();
+            clearAndInit();
+        }));
+        controls.add(new Tog(rx - 6, cy + 54, rw + 12, "Automatisch verkaufen", () -> cfg.cellAuto, v -> { cfg.cellAuto = v; ModConfig.save(); }));
+        controls.add(new Sld(rx + 2, cy + 80, rw - 4, "Intervall", " s", 5, 300,
+                () -> cfg.cellInterval, v -> cfg.cellInterval = v));
+        int hw = (rw - 4) / 2;
+        controls.add(new Btn(rx, cy + 114, hw, 20, () -> "Jetzt verkaufen", () -> {
+            close();
+            SellMacro.start(false);
+        }).enabledIf(() -> !SellMacro.running() && !ModConfig.get().cellItems.isEmpty()));
+        controls.add(new Btn(rx + hw + 4, cy + 114, hw, 20, () -> "Stopp", SellMacro::stop)
+                .enabledIf(SellMacro::running));
+    }
+
+    private void buildRepair() {
+        ModConfig cfg = ModConfig.get();
+        int lw = 250;
+        controls.add(new Tog(cx + 6, cy + 26, lw - 12, "Auto-Reparatur", () -> cfg.repairEnabled, v -> { cfg.repairEnabled = v; ModConfig.save(); }));
+        controls.add(new Sld(cx + 12, cy + 54, lw - 24, "Reparieren ab", " Haltbarkeit", 5, 300,
+                () -> cfg.repairThreshold, v -> cfg.repairThreshold = v));
+        controls.add(new Sld(cx + 12, cy + 84, lw - 24, "XP-Flaschen", " Stack(s)", 1, 4,
+                () -> cfg.repairStacks, v -> cfg.repairStacks = v));
+        controls.add(new Tog(cx + 6, cy + 116, lw - 12, "Aufnahme danach fortsetzen", () -> cfg.repairResume, v -> { cfg.repairResume = v; ModConfig.save(); }));
+        int hw = (lw - 24) / 2;
+        controls.add(new Btn(cx + 12, cy + 146, hw, 20, () -> "Jetzt testen", () -> {
+            close();
+            AutoRepair.start(true);
+        }).enabledIf(() -> !AutoRepair.running()));
+        controls.add(new Btn(cx + 12 + hw + 4, cy + 146, hw, 20, () -> "Stopp", AutoRepair::stop)
+                .enabledIf(AutoRepair::running));
+
+        int rx = cx + lw + 20, rw = cx + cw - rx - 10;
+        titleField = addField(new TextFieldWidget(textRenderer, rx, cy + 36, rw, 18, Text.literal("Kategorie")));
+        titleField.setMaxLength(32);
+        titleField.setText(cfg.repairCategory);
+        titleField.setChangedListener(t -> {
+            cfg.repairCategory = t;
+            ModConfig.save();
+        });
     }
 
     private static final int REC_ROWS = 5;
@@ -1482,6 +1606,14 @@ public class MenuScreen extends Screen {
                 card(ctx, cx, cy - 4, COL, 158, "Chat-Koordinaten");
                 card(ctx, cx + COL2, cy - 4, COL, 158, "Freecam");
             }
+            case SELL -> {
+                card(ctx, cx, cy - 4, LIST_W, 194, "Verkaufsliste (/sell)");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Einstellungen");
+            }
+            case REPAIR -> {
+                card(ctx, cx, cy - 4, 250, 194, "Einstellungen");
+                card(ctx, cx + 260, cy - 4, cw - 260, 194, "Shop-Kategorie");
+            }
             case RECORDER -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Aufnahmen");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Steuerung");
@@ -1534,6 +1666,8 @@ public class MenuScreen extends Screen {
             case SPAWNER -> renderSpawner(ctx);
             case CALC -> renderCalc(ctx);
             case RECORDER -> renderRecorder(ctx);
+            case SELL -> renderSell(ctx);
+            case REPAIR -> renderRepair(ctx);
             case PROGRESS -> renderProgress(ctx);
             case HOME -> renderHome(ctx);
             case ADMIN_LOGIN -> renderAdminLogin(ctx);
@@ -1560,6 +1694,33 @@ public class MenuScreen extends Screen {
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");
         text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
                 left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);
+    }
+
+    private void renderSell(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        if (cfg.cellItems.isEmpty()) {
+            text(ctx, "Noch keine Items.", cx + 12, cy + 32, 0xFF999999);
+            text(ctx, "Item in die Hand nehmen und", cx + 12, cy + 46, 0xFF777783);
+            text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
+        }
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        drawWrapped(ctx, "Öffnet /sell, legt alle Items aus der Liste hinein und schließt das Menü. Dabei wird verkauft.",
+                rx, cy + 144, rw, 0xFF777783);
+        text(ctx, "Befehl: /sellmacro  (Stopp: /sellmacro stop)", rx, cy + 172, 0xFFCCCCCC);
+        String ms = SellMacro.running() || cellStatus.isEmpty() ? SellMacro.status : cellStatus;
+        text(ctx, ms == null ? "" : shorten(ms, 78), cx, top + H - 24, 0xFFFFD866);
+    }
+
+    private void renderRepair(DrawContext ctx) {
+        int rx = cx + 270, rw = cx + cw - rx - 10;
+        text(ctx, "Kategorie-Name (sonst Totem):", rx, cy + 24, 0xFF999999);
+        drawWrapped(ctx, "Ist die Spitzhacke in deiner Hand fast kaputt: /shop, Totem (Ausrüstung), XP-Flasche, \"=64\" und Kaufen. Dann werden die Flaschen nach unten geworfen, Mending repariert.",
+                rx, cy + 62, rw, 0xFFCCCCCC);
+        drawWrapped(ctx, "Klappt ein Shop-Schritt nicht, steht der Menü-Inhalt in config/mapartassist/shop-dump.txt.",
+                rx, cy + 128, rw, 0xFF777783);
+        text(ctx, "Befehl: /repairmacro", rx, cy + 168, 0xFFCCCCCC);
+        String st = AutoRepair.status;
+        text(ctx, st == null ? "" : shorten(st, 78), cx, top + H - 24, 0xFFFFD866);
     }
 
     private void renderRecorder(DrawContext ctx) {

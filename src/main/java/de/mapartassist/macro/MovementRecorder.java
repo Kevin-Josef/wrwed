@@ -191,7 +191,6 @@ public final class MovementRecorder {
             msg(mc, "Keine Aufnahme ausgewählt.", Formatting.YELLOW);
             return;
         }
-        if (Freecam.active()) Freecam.stop(mc);
         playing = r;
         idx = 0;
         repeatsDone = 0;
@@ -248,6 +247,7 @@ public final class MovementRecorder {
         float y = cfg.recRelativeYaw ? baseYaw + (r.yaw[idx] - r.yaw[0]) : r.yaw[idx];
         p.setYaw(y);
         p.setPitch(r.pitch[idx]);
+        Freecam.syncSaved(y, r.pitch[idx]);
 
         int f = r.flags[idx];
         GameOptions o = mc.options;
