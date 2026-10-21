@@ -31,12 +31,12 @@ import java.util.Set;
 public final class SellMacro {
     private SellMacro() {}
 
-    private enum State { IDLE, OPEN, MOVE, CLOSE, DELAY }
+    private enum State { IDLE, OPEN, MOVE, CLOSE, DELAY, RETRY }
 
     private static State state = State.IDLE;
     private static int timer;
     private static final Deque<Integer> queue = new ArrayDeque<>();
-    private static int movedItems, cycles, totalBefore;
+    private static int movedItems, cycles, totalBefore, failStreak, stallStreak, retryTicks;
     private static int autoTimer = 0;
     public static String status = "";
 
@@ -103,6 +103,8 @@ public final class SellMacro {
         }
         movedItems = 0;
         cycles = 0;
+        failStreak = 0;
+        stallStreak = 0;
         queue.clear();
         p.networkHandler.sendChatCommand("sell");
         state = State.OPEN;
@@ -117,6 +119,26 @@ public final class SellMacro {
         state = State.IDLE;
         queue.clear();
         say("Gestoppt.", Formatting.YELLOW);
+    }
+
+    /** Kein Abbruch: kurz warten (wird bei wiederholten Fehlern laenger, max. 5 s) und /sell neu versuchen. */
+    private static void retryLater(String why) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ClientPlayerEntity p = mc.player;
+        if (p != null && screenOpen(mc, p)) p.closeHandledScreen();
+        queue.clear();
+        failStreak++;
+        retryTicks = Math.min(100, 20 * (1 << Math.min(failStreak - 1, 3)));
+        status = why + " - neuer Versuch in " + String.format(java.util.Locale.ROOT, "%.1f", retryTicks / 20f) + " s";
+        state = State.RETRY;
+        timer = 0;
+    }
+
+    private static void finishDone() {
+        say(movedItems > 0
+                ? "Fertig: " + movedItems + " Items in " + cycles + " Durchgang/Durchgängen verkauft."
+                : "Nichts (mehr) zu verkaufen.", movedItems > 0 ? Formatting.GREEN : Formatting.YELLOW);
+        state = State.IDLE;
     }
 
     private static void fail(String msg) {
@@ -171,19 +193,21 @@ public final class SellMacro {
                         if (!st.isEmpty() && f.contains(st.getItem())) queue.add(s.id);
                     }
                     if (queue.isEmpty()) {
-                        fail("Keine passenden Items gefunden.");
+                        MinecraftClient mc0 = client;
+                        if (p != null && screenOpen(mc0, p)) p.closeHandledScreen();
+                        finishDone();
                         return;
                     }
                     totalBefore = sellableTotal(p);
                     state = State.MOVE;
                     timer = 0;
-                } else if (timer > 80) {
-                    fail("/sell hat sich nicht geöffnet. Abgebrochen.");
+                } else if (timer > 60) {
+                    retryLater("/sell hat sich nicht geöffnet");
                 }
             }
             case MOVE -> {
                 if (!screenOpen(client, p)) {
-                    fail("Das Menü wurde geschlossen. Abgebrochen.");
+                    retryLater("Menü wurde geschlossen");
                     return;
                 }
                 // Alles in einem einzigen Tick hineinschieben (Shift-Klick auf jeden passenden Stack).
@@ -195,9 +219,15 @@ public final class SellMacro {
                 }
                 int moved = totalBefore - sellableTotal(p);
                 if (moved <= 0) {
-                    fail("Das Verkaufsmenü nimmt nichts mehr an (voll?). Abgebrochen.");
+                    if (++stallStreak >= 12) {
+                        fail("Das Verkaufsmenü nimmt dauerhaft nichts an. Abgebrochen.");
+                    } else {
+                        retryLater("Verkaufsmenü nimmt gerade nichts an");
+                    }
                     return;
                 }
+                stallStreak = 0;
+                failStreak = 0;
                 movedItems += moved;
                 cycles++;
                 status = "Verkaufe … Durchgang " + cycles + ", bisher " + movedItems + " Items";
@@ -212,15 +242,26 @@ public final class SellMacro {
                 }
             }
             case DELAY -> {
-                if (timer < 4) return;
+                if (timer < 6) return;
                 if (cfg.cellRepeat && client.currentScreen == null && countSellable(p) > 0) {
                     // Es liegt (wieder) etwas aus der Liste im Inventar: naechster Durchgang.
                     p.networkHandler.sendChatCommand("sell");
                     state = State.OPEN;
                     timer = 0;
                 } else {
-                    say("Fertig: " + movedItems + " Items in " + cycles + " Durchgang/Durchgängen verkauft.", Formatting.GREEN);
-                    state = State.IDLE;
+                    finishDone();
+                }
+            }
+            case RETRY -> {
+                if (timer < retryTicks || client.currentScreen != null) return;
+                if (countSellable(p) == 0) {
+                    finishDone();
+                } else if (!cfg.cellRepeat && cycles > 0) {
+                    finishDone();
+                } else {
+                    p.networkHandler.sendChatCommand("sell");
+                    state = State.OPEN;
+                    timer = 0;
                 }
             }
             default -> { }

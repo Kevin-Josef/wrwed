@@ -64,3 +64,8 @@ solange noch Items aus der Liste im Inventar sind (Stopp: Button oder /sellmacro
 das Verkaufsmenue nichts mehr annimmt.
 "Auto-Pruefung alle X s": Bei "Automatisch starten" schaut die Mod alle X Sekunden nach, ob Items aus der
 Liste im Inventar sind, und startet dann von selbst einen Verkauf.
+
+==== 1.15.4 ====
+Verkaufs-Makro bricht nicht mehr ab: Oeffnet sich /sell nicht, schliesst sich das Menue oder nimmt es gerade nichts an,
+wartet das Makro kurz (0,5 s, bei wiederholten Fehlern bis 5 s) und versucht es von selbst neu. Es endet nur, wenn
+nichts mehr aus der Liste im Inventar ist, bei Stopp, oder wenn das Menue 12 Mal hintereinander gar nichts annimmt.
