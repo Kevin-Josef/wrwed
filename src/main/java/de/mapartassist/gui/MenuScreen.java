@@ -1831,6 +1831,110 @@ public class MenuScreen extends Screen {
                 rx, cy + 116, COL - 24, 0xFF777783);
     }
 
+    private void renderSpawner(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 120,
+                cfg.spawnerGuard ? 0xFF66DD77 : 0xFFDD6666);
+        boolean pick = client != null && client.player != null && SpawnerGuard.hasSilkPickaxe(client.player);
+        text(ctx, pick ? "Silk-Touch-Spitzhacke: gefunden" : "Silk-Touch-Spitzhacke: FEHLT",
+                cx + 12, cy + 131, pick ? 0xFF66DD77 : 0xFFFFD866);
+        text(ctx, "Ablauf: Spieler erkannt, Spawner", cx + 12, cy + 146, 0xFF777783);
+        text(ctx, "abbauen, Befehl, ggf. verlassen.", cx + 12, cy + 157, 0xFF777783);
+        text(ctx, "Spawner in 4 Blöcken. Taste L = an/aus.", cx + 12, cy + 168, 0xFF777783);
+
+        int rx = cx + COL2 + 12;
+        text(ctx, "Befehl oder Text (z. B. /spawn):", rx, cy + 56, 0xFFCCCCCC);
+        if (!cfg.spawnerGuardCommand) {
+            text(ctx, "Befehl aus: es wird immer verlassen.", rx, cy + 152, 0xFFFFD866);
+        } else if (!cfg.spawnerGuardLeaveAfter) {
+            text(ctx, "Nach dem Befehl bleibst du online.", rx, cy + 152, 0xFF777783);
+            text(ctx, "Der Schutz schaltet sich dann aus.", rx, cy + 163, 0xFF777783);
+        } else {
+            text(ctx, "Nach dem Befehl wartest du kurz,", rx, cy + 152, 0xFF777783);
+            text(ctx, "dann wird der Server verlassen.", rx, cy + 163, 0xFF777783);
+        }
+        text(ctx, SpawnerGuard.status, cx, top + H - 24, SpawnerGuard.active() ? 0xFFFF6666 : 0xFFFFD866);
+    }
+
+    private void renderCalc(DrawContext ctx) {
+        int dx = cx + 13, dy = cy + 2, dw = 196;
+        ctx.fill(dx, dy, dx + dw, dy + 30, 0xFF14141B);
+        outline(ctx, dx, dy, dw, 30, alpha(Theme.accent(), 0.5f));
+        String pend = TrollCalc.pending();
+        text(ctx, pend, dx + dw - 6 - textRenderer.getWidth(pend), dy + 4, 0xFF777783);
+        String disp = TrollCalc.display();
+        text(ctx, disp, dx + dw - 6 - textRenderer.getWidth(disp), dy + 16, 0xFFFFFFFF);
+
+        int rx = cx + 232 + 10;
+        int y = cy + 28;
+        if (TrollCalc.history.isEmpty()) text(ctx, "Noch nichts gerechnet.", rx, y, 0xFF777783);
+        for (String h : TrollCalc.history) {
+            text(ctx, h, rx, y, 0xFFCCCCCC);
+            y += 13;
+        }
+    }
+
+    private void renderHt1(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        text(ctx, cfg.combatLock ? "Status: AN" : "Status: AUS", cx + 12, cy + 122,
+                cfg.combatLock ? 0xFF66DD77 : 0xFFDD6666);
+        long rem = CombatLock.remainingMs();
+        if (rem >= 0) {
+            text(ctx, "Verlasse Server in " + (int) Math.ceil(rem / 1000.0) + " s", cx + 12, cy + 136, 0xFFFF6666);
+        } else if (!CombatLock.lastTrigger.isEmpty()) {
+            text(ctx, CombatLock.lastTrigger, cx + 12, cy + 136, 0xFFFFD866);
+        }
+        int rx = cx + COL2 + 12;
+        text(ctx, "Sobald du Schaden nimmst, trennt die", rx, cy + 28, 0xFFCCCCCC);
+        text(ctx, "Mod die Verbindung (0 s = sofort).", rx, cy + 41, 0xFFCCCCCC);
+        text(ctx, "Geprüft wird jeden Frame, die Reaktion", rx, cy + 62, 0xFF777783);
+        text(ctx, "kommt direkt nach dem Treffer-Paket.", rx, cy + 75, 0xFF777783);
+        text(ctx, "Der Server hat den Treffer da schon", rx, cy + 96, 0xFF777783);
+        text(ctx, "gezählt. Taste K schaltet ein/aus.", rx, cy + 109, 0xFF777783);
+    }
+
+    private void renderMacros(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        if (cfg.sellItems.isEmpty()) {
+            text(ctx, "Noch keine Items.", cx + 12, cy + 32, 0xFF999999);
+            text(ctx, "Item in die Hand nehmen und", cx + 12, cy + 46, 0xFF777783);
+            text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
+        }
+        int rx = cx + LIST_W + 26;
+        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 148, 0xFFCCCCCC);
+        text(ctx, "Preis manuell: /ahmacro preis tnt 200k", rx, cy + 160, 0xFF777783);
+        text(ctx, "Preis vergessen: /ahmacro reset  |  F8 = Diagnose", rx, cy + 171, 0xFF777783);
+        if (cfg.macroDryRun) {
+            text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 182,
+                    alpha(0xFF5555, 0.7f + 0.3f * (float) Math.sin(time() * 4)));
+        }
+        String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
+        text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
+    }
+
+    private void renderSettings(DrawContext ctx) {
+        int lx = designX();
+        int rx = lx + 14 + S + 10 + HUE_W + 16;
+        text(ctx, "#", rx - 9, cy + 55, 0xFFCCCCCC);
+        text(ctx, "Vorschau", rx, cy + 100, 0xFFCCCCCC);
+        int sw = lx + SET_A - 10 - rx;
+        ctx.fill(rx - 1, cy + 111, rx + sw + 1, cy + 129, 0xFF000000);
+        ctx.fill(rx, cy + 112, rx + sw, cy + 128, 0xFF000000 | editedColor());
+        text(ctx, "Voreinstellungen", lx + 14, cy + 150, 0xFF777783);
+
+        int bx = lx + SET_A + SET_GAP, px = bx + SET_B + SET_GAP;
+        if (ModConfig.get().bgStyle == 6 && BackgroundImage.get() == null) {
+            text(ctx, "PNG/JPG ins Fenster ziehen", bx + 10, cy + 108, 0xFFFFD866);
+        }
+        text(ctx, "Menü-Titel (fest)", px + 10, cy + 22, 0xFF999999);
+        int pw = left + W - 14 - px;
+        ctx.fill(px + 10, cy + 33, px + pw - 10, cy + 51, 0x40000000);
+        outline(ctx, px + 10, cy + 33, pw - 20, 18, alpha(Theme.accent(), 0.3f));
+        text(ctx, shorten(ModConfig.DEFAULT_TITLE, 20), px + 15, cy + 38, 0xFFAAAAB6);
+        String bs = BackgroundImage.status;
+        text(ctx, bs == null ? "" : bs, left + 14, top + H - 24, 0xFFFFD866);
+    }
+
     private void renderCapes(DrawContext ctx) {
         List<CapeManager.Entry> list = CapeManager.list();
         if (list.isEmpty()) {
