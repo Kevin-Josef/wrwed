@@ -934,13 +934,13 @@ public class MenuScreen extends Screen {
     private void buildAfk() {
         ModConfig cfg = ModConfig.get();
         controls.add(new Tog(cx + 6, cy + 26, COL - 12, "Wächter aktiv", () -> AfkGuard.active(), v -> AfkGuard.set(client, v)));
-        controls.add(new Sld(cx + 12, cy + 54, COL - 24, "Abstand zum Platz", " Blöcke", 10, 300,
+        controls.add(new Sld(cx + 12, cy + 54, COL - 24, "Als Sprung zählt ab", " Blöcke", 10, 300,
                 () -> cfg.afkRadius, v -> cfg.afkRadius = v));
         controls.add(new Sld(cx + 12, cy + 84, COL - 24, "/afk wiederholen", " s", 1, 15,
                 () -> cfg.afkRetrySec, v -> cfg.afkRetrySec = v));
-        controls.add(new Btn(cx + 10, cy + 120, COL - 20, 20, () -> "AFK-Platz hier neu setzen", () -> {
-            AfkGuard.setHome(client);
-        }));
+        controls.add(new Btn(cx + 10, cy + 120, COL - 20, 20, () -> "Jetzt /afk senden (bin am Spawn)", () -> {
+            AfkGuard.forceAway();
+        }).enabledIf(AfkGuard::active));
     }
 
     private void buildRepair() {
@@ -1678,13 +1678,13 @@ public class MenuScreen extends Screen {
     }
 
     private void renderAfk(DrawContext ctx) {
-        text(ctx, "AFK-Platz: " + AfkGuard.homeText(), cx + 12, cy + 144, 0xFF999999);
+        text(ctx, AfkGuard.modeText(), cx + 12, cy + 144, AfkGuard.active() ? 0xFF66DD99 : 0xFF999999);
         int rx = cx + COL2 + 12;
-        drawWrapped(ctx, "Abends im AFK-Bereich einschalten, morgens wieder aus. Der Platz, an dem du beim Einschalten stehst, wird gemerkt.",
+        drawWrapped(ctx, "Einschalten, während du in einer AFK-Area stehst. Welche Area es ist, ist egal.",
                 rx, cy + 26, COL - 24, 0xFFCCCCCC);
-        drawWrapped(ctx, "Wirst du weit weg gesetzt (Spawn oder andere Welt), sendet die Mod /afk, bis du wieder dort bist.",
-                rx, cy + 76, COL - 24, 0xFFCCCCCC);
-        drawWrapped(ctx, "Ausgeschaltet wird nur von Hand.", rx, cy + 114, COL - 24, 0xFF777783);
+        drawWrapped(ctx, "Wirst du weggesetzt (großer Sprung oder neue Welt, z. B. Spawn), sendet die Mod /afk, bis der nächste Teleport kommt.",
+                rx, cy + 62, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "Aus wird nur von Hand geschaltet.", rx, cy + 118, COL - 24, 0xFF777783);
         String st = AfkGuard.status;
         text(ctx, st == null ? "" : shorten(st, 78), cx, top + H - 24, 0xFFFFD866);
     }

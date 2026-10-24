@@ -96,3 +96,9 @@ Ausrichtung sind nicht betroffen.
 - Cape Creator: erreichbar ueber den Knopf "Creator" auf der Capes-Seite (die Kachel entfiel, damit Platz fuer Freecam ist).
 - src/main/java/de/mapartassist/chat/ChatCoordinates.java ist nur noch eine leere Klasse, damit der GitHub-Upload die alte
   Version ueberschreibt. Du kannst die Datei in GitHub auch loeschen.
+
+==== 1.17.3 ====
+AFK-Waechter ohne festen Platz: Es gibt mehrere AFK-Areas, deshalb merkt die Mod keinen Ort mehr. Beim Einschalten gilt
+"du bist in einer AFK-Area". Ein grosser Positionssprung oder eine neue Welt (Spawn) loest /afk-Senden aus, und der
+naechste Sprung (= Ankunft in einer AFK-Area) beendet es. Nach 10 Versuchen ohne neuen Sprung nimmt die Mod an,
+dass du schon in der Area stehst, und hoert auf. Knopf "Jetzt /afk senden", falls du schon am Spawn einschaltest.
