@@ -61,16 +61,12 @@ public class MenuScreen extends Screen {
         MAPART("Litematica", "Map Art"),
         PROGRESS("Litematica", "Fortschritt"),
         SETTINGS(null, "Design"),
-        ADMIN_LOGIN(null, "Admin-Panel"),
-        ADMIN(null, "Admin-Panel");
+        FREECAM("Extras", "Freecam");
 
         final String group, label;
         Tab(String group, String label) { this.group = group; this.label = label; }
         String title() { return group == null ? label : group + " > " + label; }
     }
-
-    // Admin-Panel: reine Oberflaechen-Sperre (steht im Klartext in der Mod, ist kein echter Schutz)
-    private static final String ADMIN_PASSWORD = "676767";
 
     /** Fenstergroesse (ohne Seitenleiste: Startseite mit Kacheln). */
     private static final int W = 636, H = 292;
@@ -104,11 +100,7 @@ public class MenuScreen extends Screen {
 
     // Farbwaehler
     private float hue, sat, val;
-    private TextFieldWidget hexField, cmdField, titleField, pwField;
-    private boolean adminUnlocked = false;
-    private boolean pendingUnlock = false;
-    private boolean pwError = false;
-    private float pwErrorAt = -10f;
+    private TextFieldWidget hexField, cmdField, titleField;
     private final List<TextFieldWidget> fields = new ArrayList<>();
     private boolean suppressHex = false;
 
@@ -243,9 +235,9 @@ public class MenuScreen extends Screen {
         void press(int mx, int my) { openTab(tab); }
     }
 
-    /** Kleiner Icon-Knopf oben rechts (Design / Admin). */
+    /** Kleiner Icon-Knopf oben rechts (Design). */
     private class IconBtn extends Control {
-        final int kind; // 0 = Design, 1 = Admin
+        final int kind; // 0 = Design
         final String tip;
         final BooleanSupplier on;
         final Runnable run;
@@ -270,13 +262,6 @@ public class MenuScreen extends Screen {
                     ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
                     ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, sel ? 0xFFFFFFFF : acc);
                 }
-            } else {
-                int up = adminUnlocked ? 2 : 0;
-                ctx.fill(x + 6, y + 3 - up, x + 12, y + 4 - up, lc);
-                ctx.fill(x + 6, y + 3 - up, x + 7, y + 8, lc);
-                ctx.fill(x + 11, y + 3 - up, x + 12, y + 8 - (adminUnlocked ? 3 : 0), lc);
-                ctx.fill(x + 4, y + 8, x + 14, y + 15, adminUnlocked ? 0xFF66DD99 : lc);
-                ctx.fill(x + 8, y + 10, x + 10, y + 13, 0xFF1E1E28);
             }
             if (hover > 0.5f) text(ctx, tip, x + w - textRenderer.getWidth(tip), y + 22, 0xFF9A9AA8);
         }
@@ -627,14 +612,9 @@ public class MenuScreen extends Screen {
         hexField = null;
         cmdField = null;
         titleField = null;
-        pwField = null;
         fields.clear();
 
-        controls.add(new IconBtn(left + W - 28, top + 12, 1, "Admin", () -> activeTab == Tab.ADMIN || activeTab == Tab.ADMIN_LOGIN, () -> {
-            if (activeTab == Tab.ADMIN || activeTab == Tab.ADMIN_LOGIN) openTab(Tab.HOME);
-            else openTab(adminUnlocked ? Tab.ADMIN : Tab.ADMIN_LOGIN);
-        }));
-        controls.add(new IconBtn(left + W - 50, top + 12, 0, "Design", () -> activeTab == Tab.SETTINGS, () ->
+        controls.add(new IconBtn(left + W - 28, top + 12, 0, "Design", () -> activeTab == Tab.SETTINGS, () ->
                 openTab(activeTab == Tab.SETTINGS ? Tab.HOME : Tab.SETTINGS)));
         controls.add(new Btn(left + W - 96, top + H - 30, 80, 20, () -> "Fertig", this::close));
         if (activeTab != Tab.HOME) {
@@ -656,8 +636,7 @@ public class MenuScreen extends Screen {
             case AFK -> buildAfk();
             case PROGRESS -> buildProgress();
             case CALC -> buildCalc();
-            case ADMIN_LOGIN -> buildAdminLogin();
-            case ADMIN -> buildAdmin();
+            case FREECAM -> buildFreecam();
         }
     }
 
@@ -677,12 +656,19 @@ public class MenuScreen extends Screen {
             new Group("Verkauf", 0, 0, new Tab[]{Tab.AUCTION, Tab.SELL}),
             new Group("Litematica", 0, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
             new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
-            new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.CREATOR}),
-            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
+            new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES}),
+            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK, Tab.FREECAM}),
     };
     private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
-    private int groupX(Group g) { return g.side() == 1 ? left + 14 + 2 * TILE_W + TILE_GAP + 12 : left + 14; }
+    private int groupX(Group g) {
+        if (g.side() != 1) return left + 14;
+        int w0 = 0;
+        for (Group o : GROUPS) {
+            if (o.row() == g.row() && o.side() != 1) w0 = o.tabs().length * TILE_W + (o.tabs().length - 1) * TILE_GAP;
+        }
+        return left + 14 + w0 + 12;
+    }
     private int groupY(Group g) { return top + 48 + g.row() * 68; }
 
     private static Item tileItem(Tab t) {
@@ -691,6 +677,7 @@ public class MenuScreen extends Screen {
             case SELL -> Items.EMERALD;
             case REPAIR -> Items.DIAMOND_PICKAXE;
             case AFK -> Items.RED_BED;
+            case FREECAM -> Items.ENDER_EYE;
             case HT1 -> Items.IRON_SWORD;
             case SPAWNER -> Items.SPAWNER;
             case RECORDER -> Items.CLOCK;
@@ -709,6 +696,7 @@ public class MenuScreen extends Screen {
             case SELL -> "Verkaufs-Makro";
             case REPAIR -> "Auto-Reparatur";
             case AFK -> "AFK-Wächter";
+            case FREECAM -> "Freecam";
             case PROGRESS -> "Fortschritt";
             case CREATOR -> "Creator";
             case CALC -> "Rechner";
@@ -723,6 +711,7 @@ public class MenuScreen extends Screen {
             case CAPES -> "Bibliothek";
             case CREATOR -> "Bild zu Cape";
             case CALC -> "Mit Verlauf";
+            case FREECAM -> "Frei fliegen";
             case SETTINGS -> "Farben & Effekte";
             default -> "";
         };
@@ -735,6 +724,7 @@ public class MenuScreen extends Screen {
             case SELL -> SellMacro.running() ? "LÄUFT" : c.cellAuto ? "AUTO" : "AUS";
             case REPAIR -> AutoRepair.running() ? "LÄUFT" : c.repairEnabled ? "AN" : "AUS";
             case AFK -> AfkGuard.active() ? "AN" : "AUS";
+            case FREECAM -> Freecam.active() ? "AN" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
             case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
             case MAPART -> c.autoPlace ? "AN" : "AUS";
@@ -755,37 +745,14 @@ public class MenuScreen extends Screen {
         }
     }
 
-    // ---- Admin-Panel
+    // ---- Freecam
 
-    private void buildAdminLogin() {
-        int bx = left + W / 2 - 110;
-        pwField = addField(new TextFieldWidget(textRenderer, bx, cy + 52, 220, 20, Text.literal("Passwort")));
-        pwField.setMaxLength(16);
-        pwField.setChangedListener(t -> {
-            pwError = false;
-            if (t.equals(ADMIN_PASSWORD)) pendingUnlock = true;
-        });
-        setInitialFocus(pwField);
-        controls.add(new Btn(bx, cy + 80, 220, 20, () -> "Entsperren", () -> {
-            if (pwField != null && pwField.getText().equals(ADMIN_PASSWORD)) {
-                pendingUnlock = true;
-            } else {
-                pwError = true;
-                pwErrorAt = time();
-            }
-        }));
-    }
-
-    private void buildAdmin() {
+    private void buildFreecam() {
         ModConfig cfg = ModConfig.get();
         controls.add(new Tog(cx + 6, cy + 28, COL - 12, "Freecam",
                 () -> Freecam.active(), v -> Freecam.set(client, v)));
         controls.add(new Sld(cx + 12, cy + 58, COL - 24, "Geschwindigkeit", " Blöcke/s", 1, 40,
                 () -> cfg.freecamSpeed, v -> cfg.freecamSpeed = v));
-        controls.add(new Btn(left + 14, top + H - 30, 130, 20, () -> "Admin-Panel sperren", () -> {
-            adminUnlocked = false;
-            openTab(Tab.HOME);
-        }));
     }
 
     private TextFieldWidget addField(TextFieldWidget f) {
@@ -1111,7 +1078,7 @@ public class MenuScreen extends Screen {
                 .enabledIf(() -> capeScroll < maxScroll));
 
         int rx = cx + LIST_W + 10, rw = cx + cw - rx;
-        int by = cy + 132, bw = (rw - 8) / 3;
+        int by = cy + 132, bw = (rw - 12) / 4;
         controls.add(new Btn(rx, by, bw, 20, () -> "Keins", () -> CapeManager.select(""))
                 .enabledIf(() -> !ModConfig.get().selectedCape.isEmpty()));
         controls.add(new Btn(rx + bw + 4, by, bw, 20, () -> "Löschen", () -> {
@@ -1126,6 +1093,7 @@ public class MenuScreen extends Screen {
                 CapeManager.status = "Ordner konnte nicht geöffnet werden.";
             }
         }));
+        controls.add(new Btn(rx + (bw + 4) * 3, by, bw, 20, () -> "Creator", () -> openTab(Tab.CREATOR)));
         controls.add(new Btn(rx, by + 24, rw, 20,
                 () -> "PNG hineinziehen als: " + (dropAsElytra ? "ELYTRA" : "CAPE"),
                 () -> dropAsElytra = !dropAsElytra));
@@ -1554,11 +1522,6 @@ public class MenuScreen extends Screen {
             progSeen = SchematicProgress.version();
             clearAndInit();
         }
-        if (pendingUnlock) {
-            pendingUnlock = false;
-            adminUnlocked = true;
-            openTab(Tab.ADMIN);
-        }
         // Maus direkt abfragen
         boolean down = client != null && GLFW.glfwGetMouseButton(
                 client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
@@ -1617,10 +1580,7 @@ public class MenuScreen extends Screen {
                 card(ctx, bx, cy - 4, SET_B, 196, "Hintergrund");
                 card(ctx, px, cy - 4, left + W - 14 - px, 196, "Menü");
             }
-            case ADMIN_LOGIN -> card(ctx, left + W / 2 - 130, cy - 4, 260, 124, "Admin-Panel");
-            case ADMIN -> {
-                card(ctx, cx, cy - 4, COL, 158, "Freecam");
-            }
+            case FREECAM -> card(ctx, cx, cy - 4, COL, 158, "Freecam");
             case AFK -> {
                 card(ctx, cx, cy - 4, COL, 158, "AFK-Wächter");
                 card(ctx, cx + COL2, cy - 4, COL, 158, "So funktioniert es");
@@ -1692,8 +1652,7 @@ public class MenuScreen extends Screen {
             case REPAIR -> renderRepair(ctx);
             case PROGRESS -> renderProgress(ctx);
             case HOME -> renderHome(ctx);
-            case ADMIN_LOGIN -> renderAdminLogin(ctx);
-            case ADMIN -> renderAdmin(ctx);
+            case FREECAM -> renderFreecam(ctx);
         }
     }
 
@@ -1803,27 +1762,7 @@ public class MenuScreen extends Screen {
         }
     }
 
-    private void renderAdminLogin(DrawContext ctx) {
-        int mx = left + W / 2;
-        textCentered(ctx, "Bitte Passwort eingeben", mx, cy + 30, 0xFFCCCCCC);
-        if (pwField != null) {
-            // Eingabe verdecken: Textfeld-Inhalt mit Sternchen uebermalen
-            int fx = pwField.getX(), fy = pwField.getY(), fw = pwField.getWidth(), fh = pwField.getHeight();
-            ctx.fill(fx + 1, fy + 1, fx + fw - 1, fy + fh - 1, 0xFF000000);
-            String stars = "*".repeat(pwField.getText().length());
-            text(ctx, stars, fx + 4, fy + (fh - 8) / 2, 0xFFFFFFFF);
-            if (pwField.isFocused() && (int) (time() * 2) % 2 == 0) {
-                text(ctx, "_", fx + 4 + textRenderer.getWidth(stars), fy + (fh - 8) / 2, 0xFFFFFFFF);
-            }
-        }
-        if (pwError) {
-            float p = Math.min(1f, (time() - pwErrorAt) / 0.4f);
-            int shake = Math.round((float) Math.sin(p * 30f) * 3f * (1f - p));
-            textCentered(ctx, "Falsches Passwort", mx + shake, cy + 106, 0xFFFF6666);
-        }
-    }
-
-    private void renderAdmin(DrawContext ctx) {
+    private void renderFreecam(DrawContext ctx) {
         int rx = cx + 12;
         drawWrapped(ctx, "Kamera fliegt frei, dein Spieler bleibt stehen. Taste F7 schaltet um.",
                 rx, cy + 92, COL - 24, 0xFFCCCCCC);

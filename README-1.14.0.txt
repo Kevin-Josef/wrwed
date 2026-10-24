@@ -90,3 +90,9 @@ Ausrichtung sind nicht betroffen.
   davon weg (oder in einer anderen Welt), z. B. am Spawn, sendet die Mod /afk alle Y Sekunden, bis du wieder am Platz bist.
   Wird nur von Hand ein- und ausgeschaltet.
 - Das Design-Menue ist weiter ueber das Symbol oben rechts erreichbar (die Kachel wurde durch AFK-Waechter ersetzt).
+
+==== 1.17.2 ====
+- Admin-Panel samt Passwort komplett entfernt. Die Freecam ist jetzt eine normale Kachel (Extras > Freecam), Taste F7 bleibt.
+- Cape Creator: erreichbar ueber den Knopf "Creator" auf der Capes-Seite (die Kachel entfiel, damit Platz fuer Freecam ist).
+- src/main/java/de/mapartassist/chat/ChatCoordinates.java ist nur noch eine leere Klasse, damit der GitHub-Upload die alte
+  Version ueberschreibt. Du kannst die Datei in GitHub auch loeschen.
