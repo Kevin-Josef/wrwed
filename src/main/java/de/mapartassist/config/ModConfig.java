@@ -35,11 +35,16 @@ public class ModConfig {
     public String selectedCape = "";
     /** Veraltet (Titel ist jetzt fest). Bleibt nur, damit alte Config-Dateien noch lesbar sind. */
     public String menuTitle = DEFAULT_TITLE;
-    /** Chat-Koordinaten (Admin-Panel): bei Chatnachrichten die Position des Absenders anzeigen. */
-    public boolean chatCoords = false;
     /** /sell-Makro: Filterliste, Automatik und Intervall (Sekunden). */
     public List<String> cellItems = new ArrayList<>();
     public boolean cellAuto = false;
+    /** /ah sell Auto-Preis: so viele Angebote zum guenstigsten Preis muessen da sein, bevor mein Preis sinkt. */
+    public int undercutMin = 2;
+    /** Zuletzt automatisch gesetzter Preis pro Item (Registry-ID). */
+    public Map<String, Long> lastAutoPrice = new HashMap<>();
+    /** AFK-Waechter: Entfernung zum AFK-Platz ab der "Spawn" gilt, und Wartezeit zwischen /afk-Versuchen (Sekunden). */
+    public int afkRadius = 40;
+    public int afkRetrySec = 3;
     /** Nach jedem Verkauf weitermachen, solange noch Items aus der Liste im Inventar sind. */
     public boolean cellRepeat = true;
     public int cellInterval = 30;
@@ -138,6 +143,10 @@ public class ModConfig {
                 if (loaded.spawnerGuardCommandText == null) loaded.spawnerGuardCommandText = "/spawn";
                 // Titel ist fest und nicht mehr aenderbar
                 loaded.menuTitle = DEFAULT_TITLE;
+                if (loaded.lastAutoPrice == null) loaded.lastAutoPrice = new HashMap<>();
+                loaded.undercutMin = Math.max(1, Math.min(10, loaded.undercutMin <= 0 ? 2 : loaded.undercutMin));
+                loaded.afkRadius = Math.max(10, Math.min(300, loaded.afkRadius <= 0 ? 40 : loaded.afkRadius));
+                loaded.afkRetrySec = Math.max(1, Math.min(15, loaded.afkRetrySec <= 0 ? 3 : loaded.afkRetrySec));
                 if (loaded.cellItems == null) loaded.cellItems = new ArrayList<>();
                 if (loaded.repairCategory == null || loaded.repairCategory.isBlank()) loaded.repairCategory = "Ausrüstung";
                 loaded.cellInterval = Math.max(5, Math.min(300, loaded.cellInterval));

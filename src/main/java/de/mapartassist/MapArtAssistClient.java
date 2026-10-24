@@ -3,10 +3,10 @@ package de.mapartassist;
 import de.mapartassist.cam.Freecam;
 import de.mapartassist.combat.CombatLock;
 import de.mapartassist.litematica.SchematicProgress;
+import de.mapartassist.macro.AfkGuard;
 import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.macro.SellMacro;
-import de.mapartassist.chat.ChatCoordinates;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
 import de.mapartassist.guard.SpawnerGuard;
@@ -89,7 +89,6 @@ public class MapArtAssistClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ModConfig.load();
-        ChatCoordinates.init();
         AuctionMacro.init();
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY));
@@ -116,6 +115,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
         ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
         ClientTickEvents.END_CLIENT_TICK.register(SellMacro::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(AfkGuard::tick);
         ClientTickEvents.END_CLIENT_TICK.register(AutoRepair::tick);
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
         ClientTickEvents.END_CLIENT_TICK.register(SpawnerGuard::tick);
@@ -134,6 +134,14 @@ public class MapArtAssistClient implements ClientModInitializer {
                         .executes(c -> { AuctionMacro.start(); return 1; })
                         .then(ClientCommandManager.literal("stop")
                                 .executes(c -> { AuctionMacro.stop(); return 1; }))
+                        // /ahmacro reset = gemerkte Auto-Preise vergessen
+                        .then(ClientCommandManager.literal("reset")
+                                .executes(c -> {
+                                    ModConfig.get().lastAutoPrice.clear();
+                                    ModConfig.save();
+                                    AuctionMacro.message("Gemerkte Auto-Preise gelöscht.", Formatting.GREEN);
+                                    return 1;
+                                }))
                         // /ahmacro preis tnt 200k   oder   /ahmacro preis tnt auto
                         .then(ClientCommandManager.literal("preis")
                                 .then(ClientCommandManager.argument("item", StringArgumentType.word())

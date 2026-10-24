@@ -7,6 +7,7 @@ import de.mapartassist.cape.CapePreview;
 import de.mapartassist.cam.Freecam;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.litematica.SchematicProgress;
+import de.mapartassist.macro.AfkGuard;
 import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.macro.SellMacro;
@@ -53,6 +54,7 @@ public class MenuScreen extends Screen {
         SPAWNER("Makros", "Spawner-Schutz"),
         RECORDER("Makros", "Bewegungs-Recorder"),
         REPAIR("Makros", "Auto-Reparatur"),
+        AFK("Makros", "AFK-Wächter"),
         CAPES("Kosmetik", "Capes"),
         CREATOR("Kosmetik", "Cape Creator"),
         CALC(null, "Taschenrechner"),
@@ -651,6 +653,7 @@ public class MenuScreen extends Screen {
             case RECORDER -> buildRecorder();
             case SELL -> buildSell();
             case REPAIR -> buildRepair();
+            case AFK -> buildAfk();
             case PROGRESS -> buildProgress();
             case CALC -> buildCalc();
             case ADMIN_LOGIN -> buildAdminLogin();
@@ -675,7 +678,7 @@ public class MenuScreen extends Screen {
             new Group("Litematica", 0, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
             new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
             new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.CREATOR}),
-            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.SETTINGS}),
+            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
     };
     private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
@@ -687,6 +690,7 @@ public class MenuScreen extends Screen {
             case AUCTION -> Items.GOLD_INGOT;
             case SELL -> Items.EMERALD;
             case REPAIR -> Items.DIAMOND_PICKAXE;
+            case AFK -> Items.RED_BED;
             case HT1 -> Items.IRON_SWORD;
             case SPAWNER -> Items.SPAWNER;
             case RECORDER -> Items.CLOCK;
@@ -704,6 +708,7 @@ public class MenuScreen extends Screen {
             case RECORDER -> "Recorder";
             case SELL -> "Verkaufs-Makro";
             case REPAIR -> "Auto-Reparatur";
+            case AFK -> "AFK-Wächter";
             case PROGRESS -> "Fortschritt";
             case CREATOR -> "Creator";
             case CALC -> "Rechner";
@@ -729,6 +734,7 @@ public class MenuScreen extends Screen {
             case AUCTION -> AuctionMacro.running() ? "LÄUFT" : "AUS";
             case SELL -> SellMacro.running() ? "LÄUFT" : c.cellAuto ? "AUTO" : "AUS";
             case REPAIR -> AutoRepair.running() ? "LÄUFT" : c.repairEnabled ? "AN" : "AUS";
+            case AFK -> AfkGuard.active() ? "AN" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
             case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
             case MAPART -> c.autoPlace ? "AN" : "AUS";
@@ -772,12 +778,9 @@ public class MenuScreen extends Screen {
 
     private void buildAdmin() {
         ModConfig cfg = ModConfig.get();
-        controls.add(new Tog(cx + 6, cy + 28, COL - 12, "Chat-Koordinaten",
-                () -> cfg.chatCoords, v -> { cfg.chatCoords = v; ModConfig.save(); }));
-        int rx = cx + COL2;
-        controls.add(new Tog(rx + 6, cy + 28, COL - 12, "Freecam",
+        controls.add(new Tog(cx + 6, cy + 28, COL - 12, "Freecam",
                 () -> Freecam.active(), v -> Freecam.set(client, v)));
-        controls.add(new Sld(rx + 12, cy + 58, COL - 24, "Geschwindigkeit", " Blöcke/s", 1, 40,
+        controls.add(new Sld(cx + 12, cy + 58, COL - 24, "Geschwindigkeit", " Blöcke/s", 1, 40,
                 () -> cfg.freecamSpeed, v -> cfg.freecamSpeed = v));
         controls.add(new Btn(left + 14, top + H - 30, 130, 20, () -> "Admin-Panel sperren", () -> {
             adminUnlocked = false;
@@ -959,6 +962,18 @@ public class MenuScreen extends Screen {
         }).enabledIf(() -> !SellMacro.running() && !ModConfig.get().cellItems.isEmpty()));
         controls.add(new Btn(rx + hw + 4, cy + 104, hw, 20, () -> "Stopp", SellMacro::stop)
                 .enabledIf(SellMacro::running));
+    }
+
+    private void buildAfk() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 26, COL - 12, "Wächter aktiv", () -> AfkGuard.active(), v -> AfkGuard.set(client, v)));
+        controls.add(new Sld(cx + 12, cy + 54, COL - 24, "Abstand zum Platz", " Blöcke", 10, 300,
+                () -> cfg.afkRadius, v -> cfg.afkRadius = v));
+        controls.add(new Sld(cx + 12, cy + 84, COL - 24, "/afk wiederholen", " s", 1, 15,
+                () -> cfg.afkRetrySec, v -> cfg.afkRetrySec = v));
+        controls.add(new Btn(cx + 10, cy + 120, COL - 20, 20, () -> "AFK-Platz hier neu setzen", () -> {
+            AfkGuard.setHome(client);
+        }));
     }
 
     private void buildRepair() {
@@ -1191,7 +1206,8 @@ public class MenuScreen extends Screen {
         controls.add(new Btn(cx + 38, ay, 28, 18, () -> "▼", () -> { macroScroll++; clearAndInit(); })
                 .enabledIf(() -> macroScroll < maxScroll));
 
-        controls.add(new Btn(cx + LIST_W + 16, cy + 26, cx + cw - (cx + LIST_W + 16) - 6, 20,
+        int rbx = cx + LIST_W + 16, rbw = cx + cw - rbx - 6;
+        controls.add(new Btn(rbx, cy + 24, rbw, 18,
                 () -> "Item aus der Hand hinzufügen", () -> {
             if (client == null || client.player == null || client.player.getMainHandStack().isEmpty()) {
                 macroStatus = "Nimm erst ein Item in die Hand.";
@@ -1207,16 +1223,15 @@ public class MenuScreen extends Screen {
             macroStatus = "Hinzugefügt: " + client.player.getMainHandStack().getName().getString();
             clearAndInit();
         }));
-        controls.add(new Tog(cx + LIST_W + 16, cy + 56, cx + cw - (cx + LIST_W + 16) - 6,
-                "Testlauf (nur anzeigen)", () -> cfg.macroDryRun, v -> cfg.macroDryRun = v));
-        int rbx = cx + LIST_W + 16, rbw = cx + cw - rbx - 6;
-        controls.add(new Tog(rbx, cy + 82, rbw, "Wiederholen, bis leer",
-                () -> cfg.macroRepeat, v -> cfg.macroRepeat = v));
-        controls.add(new Btn(rbx, cy + 112, (rbw - 4) / 2, 20, () -> cfg.macroDryRun ? "Starten (Test)" : "Jetzt starten", () -> {
+        controls.add(new Tog(rbx, cy + 46, rbw, "Testlauf (nur anzeigen)", () -> cfg.macroDryRun, v -> cfg.macroDryRun = v));
+        controls.add(new Tog(rbx, cy + 68, rbw, "Wiederholen, bis leer", () -> cfg.macroRepeat, v -> cfg.macroRepeat = v));
+        controls.add(new Sld(rbx + 6, cy + 92, rbw - 12, "Preis senken ab", " Angeboten", 1, 10,
+                () -> cfg.undercutMin, v -> { cfg.undercutMin = v; }));
+        controls.add(new Btn(rbx, cy + 122, (rbw - 4) / 2, 20, () -> cfg.macroDryRun ? "Starten (Test)" : "Jetzt starten", () -> {
             close();
             AuctionMacro.start();
         }).enabledIf(() -> !AuctionMacro.running() && !ModConfig.get().sellItems.isEmpty()));
-        controls.add(new Btn(rbx + (rbw - 4) / 2 + 4, cy + 112, (rbw - 4) / 2, 20, () -> "Stopp",
+        controls.add(new Btn(rbx + (rbw - 4) / 2 + 4, cy + 122, (rbw - 4) / 2, 20, () -> "Stopp",
                 AuctionMacro::stop).enabledIf(AuctionMacro::running));
     }
 
@@ -1604,8 +1619,11 @@ public class MenuScreen extends Screen {
             }
             case ADMIN_LOGIN -> card(ctx, left + W / 2 - 130, cy - 4, 260, 124, "Admin-Panel");
             case ADMIN -> {
-                card(ctx, cx, cy - 4, COL, 158, "Chat-Koordinaten");
-                card(ctx, cx + COL2, cy - 4, COL, 158, "Freecam");
+                card(ctx, cx, cy - 4, COL, 158, "Freecam");
+            }
+            case AFK -> {
+                card(ctx, cx, cy - 4, COL, 158, "AFK-Wächter");
+                card(ctx, cx + COL2, cy - 4, COL, 158, "So funktioniert es");
             }
             case SELL -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Verkaufsliste (/sell)");
@@ -1670,6 +1688,7 @@ public class MenuScreen extends Screen {
             case CALC -> renderCalc(ctx);
             case RECORDER -> renderRecorder(ctx);
             case SELL -> renderSell(ctx);
+            case AFK -> renderAfk(ctx);
             case REPAIR -> renderRepair(ctx);
             case PROGRESS -> renderProgress(ctx);
             case HOME -> renderHome(ctx);
@@ -1697,6 +1716,18 @@ public class MenuScreen extends Screen {
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");
         text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
                 left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);
+    }
+
+    private void renderAfk(DrawContext ctx) {
+        text(ctx, "AFK-Platz: " + AfkGuard.homeText(), cx + 12, cy + 144, 0xFF999999);
+        int rx = cx + COL2 + 12;
+        drawWrapped(ctx, "Abends im AFK-Bereich einschalten, morgens wieder aus. Der Platz, an dem du beim Einschalten stehst, wird gemerkt.",
+                rx, cy + 26, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "Wirst du weit weg gesetzt (Spawn oder andere Welt), sendet die Mod /afk, bis du wieder dort bist.",
+                rx, cy + 76, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "Ausgeschaltet wird nur von Hand.", rx, cy + 114, COL - 24, 0xFF777783);
+        String st = AfkGuard.status;
+        text(ctx, st == null ? "" : shorten(st, 78), cx, top + H - 24, 0xFFFFD866);
     }
 
     private void renderSell(DrawContext ctx) {
@@ -1793,122 +1824,11 @@ public class MenuScreen extends Screen {
     }
 
     private void renderAdmin(DrawContext ctx) {
-        ModConfig c = ModConfig.get();
-        text(ctx, c.chatCoords ? "Status: AN" : "Status: AUS", cx + 12, cy + 62, c.chatCoords ? 0xFF66DD77 : 0xFFDD6666);
-        drawWrapped(ctx, "Zeigt unter jeder Chatnachricht die Position (X / Y / Z) des Absenders.",
-                cx + 12, cy + 78, COL - 24, 0xFFCCCCCC);
-        drawWrapped(ctx, "Nur für Spieler in Render-Distanz. Bei weiter entfernten steht \"Position unbekannt\", ihre Koordinaten kennt der Client nicht (dafür bräuchte es ein Server-Plugin).",
-                cx + 12, cy + 102, COL - 24, 0xFF777783);
-
-        int rx = cx + COL2 + 12;
+        int rx = cx + 12;
         drawWrapped(ctx, "Kamera fliegt frei, dein Spieler bleibt stehen. Taste F7 schaltet um.",
                 rx, cy + 92, COL - 24, 0xFFCCCCCC);
         drawWrapped(ctx, "W/A/S/D bewegen, Leertaste hoch, Shift runter, Strg schneller.",
                 rx, cy + 116, COL - 24, 0xFF777783);
-    }
-
-    private void renderSpawner(DrawContext ctx) {
-        ModConfig cfg = ModConfig.get();
-        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 120,
-                cfg.spawnerGuard ? 0xFF66DD77 : 0xFFDD6666);
-        boolean pick = client != null && client.player != null && SpawnerGuard.hasSilkPickaxe(client.player);
-        text(ctx, pick ? "Silk-Touch-Spitzhacke: gefunden" : "Silk-Touch-Spitzhacke: FEHLT",
-                cx + 12, cy + 131, pick ? 0xFF66DD77 : 0xFFFFD866);
-        text(ctx, "Ablauf: Spieler erkannt, Spawner", cx + 12, cy + 146, 0xFF777783);
-        text(ctx, "abbauen, Befehl, ggf. verlassen.", cx + 12, cy + 157, 0xFF777783);
-        text(ctx, "Spawner in 4 Blöcken. Taste L = an/aus.", cx + 12, cy + 168, 0xFF777783);
-
-        int rx = cx + COL2 + 12;
-        text(ctx, "Befehl oder Text (z. B. /spawn):", rx, cy + 56, 0xFFCCCCCC);
-        if (!cfg.spawnerGuardCommand) {
-            text(ctx, "Befehl aus: es wird immer verlassen.", rx, cy + 152, 0xFFFFD866);
-        } else if (!cfg.spawnerGuardLeaveAfter) {
-            text(ctx, "Nach dem Befehl bleibst du online.", rx, cy + 152, 0xFF777783);
-            text(ctx, "Der Schutz schaltet sich dann aus.", rx, cy + 163, 0xFF777783);
-        } else {
-            text(ctx, "Nach dem Befehl wartest du kurz,", rx, cy + 152, 0xFF777783);
-            text(ctx, "dann wird der Server verlassen.", rx, cy + 163, 0xFF777783);
-        }
-        text(ctx, SpawnerGuard.status, cx, top + H - 24, SpawnerGuard.active() ? 0xFFFF6666 : 0xFFFFD866);
-    }
-
-    private void renderCalc(DrawContext ctx) {
-        int dx = cx + 13, dy = cy + 2, dw = 196;
-        ctx.fill(dx, dy, dx + dw, dy + 30, 0xFF14141B);
-        outline(ctx, dx, dy, dw, 30, alpha(Theme.accent(), 0.5f));
-        String pend = TrollCalc.pending();
-        text(ctx, pend, dx + dw - 6 - textRenderer.getWidth(pend), dy + 4, 0xFF777783);
-        String disp = TrollCalc.display();
-        text(ctx, disp, dx + dw - 6 - textRenderer.getWidth(disp), dy + 16, 0xFFFFFFFF);
-
-        int rx = cx + 232 + 10;
-        int y = cy + 28;
-        if (TrollCalc.history.isEmpty()) text(ctx, "Noch nichts gerechnet.", rx, y, 0xFF777783);
-        for (String h : TrollCalc.history) {
-            text(ctx, h, rx, y, 0xFFCCCCCC);
-            y += 13;
-        }
-    }
-
-    private void renderHt1(DrawContext ctx) {
-        ModConfig cfg = ModConfig.get();
-        text(ctx, cfg.combatLock ? "Status: AN" : "Status: AUS", cx + 12, cy + 122,
-                cfg.combatLock ? 0xFF66DD77 : 0xFFDD6666);
-        long rem = CombatLock.remainingMs();
-        if (rem >= 0) {
-            text(ctx, "Verlasse Server in " + (int) Math.ceil(rem / 1000.0) + " s", cx + 12, cy + 136, 0xFFFF6666);
-        } else if (!CombatLock.lastTrigger.isEmpty()) {
-            text(ctx, CombatLock.lastTrigger, cx + 12, cy + 136, 0xFFFFD866);
-        }
-        int rx = cx + COL2 + 12;
-        text(ctx, "Sobald du Schaden nimmst, trennt die", rx, cy + 28, 0xFFCCCCCC);
-        text(ctx, "Mod die Verbindung (0 s = sofort).", rx, cy + 41, 0xFFCCCCCC);
-        text(ctx, "Geprüft wird jeden Frame, die Reaktion", rx, cy + 62, 0xFF777783);
-        text(ctx, "kommt direkt nach dem Treffer-Paket.", rx, cy + 75, 0xFF777783);
-        text(ctx, "Der Server hat den Treffer da schon", rx, cy + 96, 0xFF777783);
-        text(ctx, "gezählt. Taste K schaltet ein/aus.", rx, cy + 109, 0xFF777783);
-    }
-
-    private void renderMacros(DrawContext ctx) {
-        ModConfig cfg = ModConfig.get();
-        if (cfg.sellItems.isEmpty()) {
-            text(ctx, "Noch keine Items.", cx + 12, cy + 32, 0xFF999999);
-            text(ctx, "Item in die Hand nehmen und", cx + 12, cy + 46, 0xFF777783);
-            text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
-        }
-        int rx = cx + LIST_W + 26;
-        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 140, 0xFFCCCCCC);
-        text(ctx, "Manuellen Preis setzen: /ahmacro preis tnt 200k", rx, cy + 154, 0xFF777783);
-        text(ctx, "Chip Auto/Manuell schaltet um. F8 = Diagnose.", rx, cy + 166, 0xFF777783);
-        if (cfg.macroDryRun) {
-            text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 178,
-                    alpha(0xFF5555, 0.7f + 0.3f * (float) Math.sin(time() * 4)));
-        }
-        String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
-        text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);
-    }
-
-    private void renderSettings(DrawContext ctx) {
-        int lx = designX();
-        int rx = lx + 14 + S + 10 + HUE_W + 16;
-        text(ctx, "#", rx - 9, cy + 55, 0xFFCCCCCC);
-        text(ctx, "Vorschau", rx, cy + 100, 0xFFCCCCCC);
-        int sw = lx + SET_A - 10 - rx;
-        ctx.fill(rx - 1, cy + 111, rx + sw + 1, cy + 129, 0xFF000000);
-        ctx.fill(rx, cy + 112, rx + sw, cy + 128, 0xFF000000 | editedColor());
-        text(ctx, "Voreinstellungen", lx + 14, cy + 150, 0xFF777783);
-
-        int bx = lx + SET_A + SET_GAP, px = bx + SET_B + SET_GAP;
-        if (ModConfig.get().bgStyle == 6 && BackgroundImage.get() == null) {
-            text(ctx, "PNG/JPG ins Fenster ziehen", bx + 10, cy + 108, 0xFFFFD866);
-        }
-        text(ctx, "Menü-Titel (fest)", px + 10, cy + 22, 0xFF999999);
-        int pw = left + W - 14 - px;
-        ctx.fill(px + 10, cy + 33, px + pw - 10, cy + 51, 0x40000000);
-        outline(ctx, px + 10, cy + 33, pw - 20, 18, alpha(Theme.accent(), 0.3f));
-        text(ctx, shorten(ModConfig.DEFAULT_TITLE, 20), px + 15, cy + 38, 0xFFAAAAB6);
-        String bs = BackgroundImage.status;
-        text(ctx, bs == null ? "" : bs, left + 14, top + H - 24, 0xFFFFD866);
     }
 
     private void renderCapes(DrawContext ctx) {

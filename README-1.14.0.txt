@@ -80,3 +80,13 @@ Map Art: "Nur richtige Rotation" (Menue Litematica > Map Art, Standard AN). Bloe
 rotation, half, face, orientation, hinge) werden nur gesetzt, wenn sie mit deinem aktuellen Blick und Klick genau
 in der Rotation der Schematic landen wuerden. Sonst kommt der Hinweis "Falsche Ausrichtung". Bloecke ohne
 Ausrichtung sind nicht betroffen.
+
+==== 1.17.0 ====
+- Chat-Koordinaten komplett entfernt (Code, Schalter und Config).
+- /ah sell Auto-Preis: Regler "Preis senken ab X Angeboten" (Standard 2). Dein zuletzt gesetzter Auto-Preis bleibt,
+  solange nur weniger als X Angebote zum guenstigsten (niedrigeren) Preis da sind. Erst ab X Angeboten wird auf diesen
+  Preis gesenkt. Der letzte Preis wird pro Item gemerkt. Vergessen: /ahmacro reset. Manuelle Preise sind nicht betroffen.
+- AFK-Waechter (Extras > AFK-Waechter): Beim Einschalten wird dein AFK-Platz gemerkt. Bist du spaeter weiter als X Bloecke
+  davon weg (oder in einer anderen Welt), z. B. am Spawn, sendet die Mod /afk alle Y Sekunden, bis du wieder am Platz bist.
+  Wird nur von Hand ein- und ausgeschaltet.
+- Das Design-Menue ist weiter ueber das Symbol oben rechts erreichbar (die Kachel wurde durch AFK-Waechter ersetzt).

@@ -41,7 +41,7 @@ public final class AuctionMacro {
     private enum State { IDLE, NEXT, WAIT_GUI, CLOSING, SELECT, SELL, CONFIRM, DELAY }
 
     private record Job(Item item, int amount, long manual) {}
-    private record Listing(long price, int count) {
+    private record Listing(long price, int count, int same) {
         double unit() { return price / (double) count; }
     }
 
@@ -282,7 +282,21 @@ public final class AuctionMacro {
                     return;
                 }
                 // Auto-Preis: nur den Gesamtpreis eines Angebots mit exakt dieser Menge nutzen.
-                long price = cur.manual() > 0 ? cur.manual() : best.price();
+                long price;
+                String priceNote = "";
+                if (cur.manual() > 0) {
+                    price = cur.manual();
+                } else {
+                    price = best.price();
+                    String pid = net.minecraft.registry.Registries.ITEM.getId(cur.item()).toString();
+                    Long last = cfg.lastAutoPrice.get(pid);
+                    // Mein Preis bleibt, solange das billigere Angebot nur vereinzelt da ist.
+                    if (last != null && last > 0 && best.price() < last && best.same() < cfg.undercutMin) {
+                        price = last;
+                        priceNote = " [bleibe bei " + last + ": nur " + best.same() + " von " + cfg.undercutMin
+                                + " Angeboten bei " + best.price() + "]";
+                    }
+                }
                 if (price < 1) {
                     finish("Berechneter Preis ist 0. Abgebrochen.", Formatting.RED);
                     return;
@@ -290,13 +304,17 @@ public final class AuctionMacro {
                 String cmd = "ah sell " + price + " " + amount;
                 String info = amount + "x " + cur.item().getName().getString()
                         + (cur.manual() > 0 ? " (manueller Preis)"
-                        : " (günstigstes Angebot: " + best.price() + " für " + best.count() + ")");
+                        : " (günstigstes Angebot: " + best.price() + " für " + best.count() + ")" + priceNote);
                 if (cfg.macroDryRun) {
                     say("[TESTLAUF, nicht gesendet] /" + cmd + "   " + info, Formatting.AQUA);
                 } else {
                     countBeforeSell = count(p, cur.item());
                     minCountSeen = countBeforeSell;
                     sentSell = true;
+                    if (cur.manual() <= 0) {
+                        cfg.lastAutoPrice.put(net.minecraft.registry.Registries.ITEM.getId(cur.item()).toString(), price);
+                        ModConfig.save();
+                    }
                     lastServerMsg = "";
                     watchChat = 100;
                     p.networkHandler.sendChatCommand(cmd);
@@ -388,10 +406,19 @@ public final class AuctionMacro {
             if (st.isEmpty() || st.getItem() != item || st.getCount() != targetAmount) continue;
             long price = readPrice(st);
             if (price <= 0) continue;
-            Listing l = new Listing(price, st.getCount());
+            Listing l = new Listing(price, st.getCount(), 1);
             if (bestL == null || l.price() < bestL.price()) bestL = l;
         }
-        return bestL;
+        if (bestL == null) return null;
+        // Wie viele Angebote (dieser Stackgroesse) stehen zum guenstigsten Preis?
+        int same = 0;
+        for (Slot slot : p.currentScreenHandler.slots) {
+            if (slot.inventory instanceof PlayerInventory) continue;
+            ItemStack st = slot.getStack();
+            if (st.isEmpty() || st.getItem() != item || st.getCount() != targetAmount) continue;
+            if (readPrice(st) == bestL.price()) same++;
+        }
+        return new Listing(bestL.price(), bestL.count(), Math.max(1, same));
     }
 
     /** Zielmenge ist immer ein vollständiger Stack; Teilstacks werden ignoriert. */
