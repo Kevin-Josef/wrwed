@@ -800,6 +800,8 @@ public class MenuScreen extends Screen {
                 () -> cfg.takeFromInventory, v -> cfg.takeFromInventory = v));
         controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Verzögerung", " Ticks", 0, 10,
                 () -> cfg.delayTicks, v -> cfg.delayTicks = v));
+        controls.add(new Tog(cx + 6, cy + 120, COL - 12, "Nur richtige Rotation",
+                () -> cfg.rotationCheck, v -> { cfg.rotationCheck = v; ModConfig.save(); }));
 
         controls.add(new Tog(cx + COL2 + 6, cy + 26, COL - 12, "Frame-Modus", () -> cfg.frameMode, v -> cfg.frameMode = v));
         controls.add(new Sld(cx + COL2 + 12, cy + 64, COL - 24, "Max. pro Tick", "", 1, 4,
@@ -1653,6 +1655,8 @@ public class MenuScreen extends Screen {
     private void renderOverlay(DrawContext ctx) {
         switch (activeTab) {
             case MAPART -> {
+                text(ctx, "Rotation: Piston, Dropper, Treppen usw. werden", cx + COL2 + 12, cy + 126, 0xFF777783);
+                text(ctx, "nur gesetzt, wenn sie richtig stehen würden.", cx + COL2 + 12, cy + 137, 0xFF777783);
                 text(ctx, "Frame-Modus platziert pro Bild statt pro Tick.", cx + COL2 + 12, cy + 100, 0xFF777783);
                 text(ctx, "Bei Rucklern: ausgeschaltet lassen.", cx + COL2 + 12, cy + 113, 0xFF777783);
                 drawStatus(ctx);

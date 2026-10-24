@@ -24,6 +24,8 @@ public class ModConfig {
 
     public boolean autoPlace = false;
     public boolean takeFromInventory = true;
+    /** Map Art: Blöcke mit Ausrichtung (Piston, Dropper, Treppen ...) nur setzen, wenn sie in der Schematic-Rotation landen. */
+    public boolean rotationCheck = true;
     public int delayTicks = 4;
     /** true = place every rendered frame (fast). false = old tick-based click (slower, fallback). */
     public boolean frameMode = false;

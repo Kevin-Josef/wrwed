@@ -74,3 +74,9 @@ nichts mehr aus der Liste im Inventar ist, bei Stopp, oder wenn das Menue 12 Mal
 Verkaufs-Makro: "Dauerbetrieb (immer)" ersetzt Automatik + Intervall. Jeder Tick wird geprueft; sobald ein Item aus
 der Liste im Inventar liegt, wird sofort /sell geoeffnet, alles hineingeschoben und geschlossen. Keine Wartezeiten
 mehr (Fehlversuche werden nach 2 Ticks erneut probiert). Aus: Schalter oder "Stopp".
+
+==== 1.16.0 ====
+Map Art: "Nur richtige Rotation" (Menue Litematica > Map Art, Standard AN). Bloecke mit Ausrichtung (facing, axis,
+rotation, half, face, orientation, hinge) werden nur gesetzt, wenn sie mit deinem aktuellen Blick und Klick genau
+in der Rotation der Schematic landen wuerden. Sonst kommt der Hinweis "Falsche Ausrichtung". Bloecke ohne
+Ausrichtung sind nicht betroffen.

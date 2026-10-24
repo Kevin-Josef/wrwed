@@ -31,7 +31,12 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemPlacementContext;
 import net.minecraft.item.ItemStack;
+import net.minecraft.state.property.Property;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -255,6 +260,10 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (actual.getBlock() == wanted.getBlock()) return;
         if (!actual.isAir() && !actual.isReplaceable()) return;
         if (player.getBoundingBox().intersects(new Box(target))) return;
+        if (!rotationOk(client, cfg, hit, wanted)) {
+            hintRotation(client, wanted);
+            return;
+        }
 
         // Do not hammer the same position every frame if the server keeps rejecting it.
         Long last = recentAttempts.get(target);
@@ -398,6 +407,10 @@ public class MapArtAssistClient implements ClientModInitializer {
         // forward-corridor blocking: it prevented legitimate placements while moving
         // and did not reliably address server-side movement corrections.
         if (player.getBoundingBox().intersects(new Box(target))) return;
+        if (!rotationOk(client, cfg, hit, wanted)) {
+            hintRotation(client, wanted);
+            return;
+        }
 
         Block wantedBlock = wanted.getBlock();
         if (!isBlock(player.getMainHandStack(), wantedBlock)) {
@@ -454,6 +467,9 @@ public class MapArtAssistClient implements ClientModInitializer {
             World schematic = LitematicaBridge.getSchematicWorld();
             valid = schematic != null
                     && schematic.getBlockState(queuedTarget).getBlock() == queuedBlock;
+            if (valid && client.crosshairTarget instanceof BlockHitResult hh) {
+                valid = rotationOk(client, ModConfig.get(), hh, schematic.getBlockState(queuedTarget));
+            }
         }
 
         if (!valid) {
@@ -472,6 +488,43 @@ public class MapArtAssistClient implements ClientModInitializer {
         queuedHitSide = null;
         queuedTarget = null;
         queuedBlock = null;
+    }
+
+    /** Eigenschaften, die die Ausrichtung eines Blocks bestimmen. */
+    private static final Set<String> ORIENTATION_PROPS =
+            Set.of("facing", "axis", "rotation", "half", "face", "orientation", "hinge");
+
+    /**
+     * Rotations-Pruefung: Wuerde der Block mit dem aktuellen Blick/Klick genau in der Ausrichtung landen, die die
+     * Schematic verlangt (facing, axis, rotation, half ...)? Bloecke ohne Ausrichtung sind immer ok.
+     */
+    private boolean rotationOk(MinecraftClient client, ModConfig cfg, BlockHitResult hit, BlockState wanted) {
+        if (!cfg.rotationCheck || client.player == null) return true;
+        List<Property<?>> props = new ArrayList<>();
+        for (Property<?> pr : wanted.getProperties()) {
+            if (ORIENTATION_PROPS.contains(pr.getName())) props.add(pr);
+        }
+        if (props.isEmpty()) return true;
+        BlockState predicted;
+        try {
+            ItemPlacementContext ctx = new ItemPlacementContext(client.player, Hand.MAIN_HAND, new ItemStack(wanted.getBlock()), hit);
+            predicted = wanted.getBlock().getPlacementState(ctx);
+        } catch (Throwable t) {
+            return true; // Vorhersage nicht moeglich: nicht blockieren
+        }
+        if (predicted == null) return false;
+        for (Property<?> pr : props) {
+            if (!predicted.contains(pr)) continue;
+            if (!wanted.get(pr).equals(predicted.get(pr))) return false;
+        }
+        return true;
+    }
+
+    private void hintRotation(MinecraftClient client, BlockState wanted) {
+        if (messageCooldown > 0 || client.player == null) return;
+        client.player.sendMessage(Text.literal("Falsche Ausrichtung: ")
+                .append(wanted.getBlock().getName()).formatted(Formatting.YELLOW), true);
+        messageCooldown = 40;
     }
 
     private static boolean isBlock(ItemStack stack, Block block) {
