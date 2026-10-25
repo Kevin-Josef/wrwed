@@ -1111,12 +1111,15 @@ public class MenuScreen extends Screen {
 
     private void buildSpawner() {
         ModConfig cfg = ModConfig.get();
-        controls.add(new Tog(cx + 6, cy + 26, COL - 12, "Spawner-Schutz aktiv",
+        controls.add(new Tog(cx + 6, cy + 22, COL - 12, "Spawner-Schutz aktiv",
                 () -> cfg.spawnerGuard, v -> { cfg.spawnerGuard = v; ModConfig.save(); }));
-        controls.add(new Tog(cx + 6, cy + 54, COL - 12, "Spawner abbauen",
+        controls.add(new Tog(cx + 6, cy + 46, COL - 12, "Spawner abbauen",
                 () -> cfg.spawnerGuardMine, v -> { cfg.spawnerGuardMine = v; ModConfig.save(); }));
-        controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Erkennungs-Radius", " Blöcke", 10, 100,
+        controls.add(new Sld(cx + 12, cy + 70, COL - 24, "Erkennungs-Radius", " Blöcke", 10, 100,
                 () -> Math.max(10, Math.min(100, cfg.spawnerGuardRadius)), v -> cfg.spawnerGuardRadius = v));
+        controls.add(new Tog(cx + 6, cy + 100, COL - 12, "Nur an meiner Base",
+                () -> cfg.spawnerGuardHomeOnly, v -> { cfg.spawnerGuardHomeOnly = v; ModConfig.save(); }));
+        controls.add(new Btn(cx + 10, cy + 126, COL - 20, 18, () -> "Base hier speichern", () -> SpawnerGuard.saveBase(client)));
 
         int rx = cx + COL2;
         controls.add(new Tog(rx + 6, cy + 26, COL - 12, "Befehl ausführen",
@@ -1191,15 +1194,18 @@ public class MenuScreen extends Screen {
             macroStatus = "Hinzugefügt: " + client.player.getMainHandStack().getName().getString();
             clearAndInit();
         }));
-        controls.add(new Tog(rbx, cy + 46, rbw, "Testlauf (nur anzeigen)", () -> cfg.macroDryRun, v -> cfg.macroDryRun = v));
-        controls.add(new Tog(rbx, cy + 68, rbw, "Wiederholen, bis leer", () -> cfg.macroRepeat, v -> cfg.macroRepeat = v));
-        controls.add(new Sld(rbx + 6, cy + 92, rbw - 12, "Preis senken ab", " Angeboten", 1, 10,
+        int th = (rbw - 4) / 2;
+        controls.add(new Tog(rbx, cy + 46, th, "Testlauf", () -> cfg.macroDryRun, v -> cfg.macroDryRun = v));
+        controls.add(new Tog(rbx + th + 4, cy + 46, th, "Wiederholen", () -> cfg.macroRepeat, v -> cfg.macroRepeat = v));
+        controls.add(new Sld(rbx + 6, cy + 72, rbw - 12, "Preis senken ab", " Angeboten", 1, 10,
                 () -> cfg.undercutMin, v -> { cfg.undercutMin = v; }));
-        controls.add(new Btn(rbx, cy + 122, (rbw - 4) / 2, 20, () -> cfg.macroDryRun ? "Starten (Test)" : "Jetzt starten", () -> {
+        controls.add(new Sld(rbx + 6, cy + 100, rbw - 12, "Tempo", " von 3", 1, 3,
+                () -> cfg.macroSpeed, v -> { cfg.macroSpeed = v; ModConfig.save(); }));
+        controls.add(new Btn(rbx, cy + 130, (rbw - 4) / 2, 20, () -> cfg.macroDryRun ? "Starten (Test)" : "Jetzt starten", () -> {
             close();
             AuctionMacro.start();
         }).enabledIf(() -> !AuctionMacro.running() && !ModConfig.get().sellItems.isEmpty()));
-        controls.add(new Btn(rbx + (rbw - 4) / 2 + 4, cy + 122, (rbw - 4) / 2, 20, () -> "Stopp",
+        controls.add(new Btn(rbx + (rbw - 4) / 2 + 4, cy + 130, (rbw - 4) / 2, 20, () -> "Stopp",
                 AuctionMacro::stop).enabledIf(AuctionMacro::running));
     }
 
@@ -1772,14 +1778,16 @@ public class MenuScreen extends Screen {
 
     private void renderSpawner(DrawContext ctx) {
         ModConfig cfg = ModConfig.get();
-        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 120,
+        text(ctx, cfg.spawnerGuard ? "Status: AN" : "Status: AUS", cx + 12, cy + 150,
                 cfg.spawnerGuard ? 0xFF66DD77 : 0xFFDD6666);
         boolean pick = client != null && client.player != null && SpawnerGuard.hasSilkPickaxe(client.player);
         text(ctx, pick ? "Silk-Touch-Spitzhacke: gefunden" : "Silk-Touch-Spitzhacke: FEHLT",
-                cx + 12, cy + 131, pick ? 0xFF66DD77 : 0xFFFFD866);
-        text(ctx, "Ablauf: Spieler erkannt, Spawner", cx + 12, cy + 146, 0xFF777783);
-        text(ctx, "abbauen, Befehl, ggf. verlassen.", cx + 12, cy + 157, 0xFF777783);
-        text(ctx, "Spawner in 4 Blöcken. Taste L = an/aus.", cx + 12, cy + 168, 0xFF777783);
+                cx + 12, cy + 160, pick ? 0xFF66DD77 : 0xFFFFD866);
+        String bt = SpawnerGuard.baseText();
+        if (cfg.spawnerHomeSet && cfg.spawnerGuardHomeOnly && client != null) {
+            bt += SpawnerGuard.atBase(client) ? "  (hier: aktiv)" : "  (weit weg: ruht)";
+        }
+        text(ctx, bt, cx + 12, cy + 170, cfg.spawnerHomeSet ? 0xFF999999 : 0xFFFFD866);
 
         int rx = cx + COL2 + 12;
         text(ctx, "Befehl oder Text (z. B. /spawn):", rx, cy + 56, 0xFFCCCCCC);
@@ -1840,12 +1848,14 @@ public class MenuScreen extends Screen {
             text(ctx, "rechts auf Hinzufügen klicken.", cx + 12, cy + 58, 0xFF777783);
         }
         int rx = cx + LIST_W + 26;
-        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 148, 0xFFCCCCCC);
-        text(ctx, "Preis manuell: /ahmacro preis tnt 200k", rx, cy + 160, 0xFF777783);
-        text(ctx, "Preis vergessen: /ahmacro reset  |  F8 = Diagnose", rx, cy + 171, 0xFF777783);
+        text(ctx, "Befehl: /ahmacro   (Stopp: /ahmacro stop)", rx, cy + 156, 0xFFCCCCCC);
+        text(ctx, "Preis: /ahmacro preis tnt 200k | reset", rx, cy + 167, 0xFF777783);
         if (cfg.macroDryRun) {
-            text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 182,
+            text(ctx, "TESTLAUF AN: es wird nichts eingestellt!", rx, cy + 178,
                     alpha(0xFF5555, 0.7f + 0.3f * (float) Math.sin(time() * 4)));
+        } else {
+            text(ctx, cfg.macroSpeed >= 3 ? "Tempo 3: Kick-Gefahr durch Spamschutz!" : "F8 = Diagnose", rx, cy + 178,
+                    cfg.macroSpeed >= 3 ? 0xFFFFD866 : 0xFF777783);
         }
         String ms = AuctionMacro.running() || macroStatus.isEmpty() ? AuctionMacro.status : macroStatus;
         text(ctx, ms == null ? "" : ms, cx, top + H - 24, 0xFFFFD866);

@@ -102,3 +102,11 @@ AFK-Waechter ohne festen Platz: Es gibt mehrere AFK-Areas, deshalb merkt die Mod
 "du bist in einer AFK-Area". Ein grosser Positionssprung oder eine neue Welt (Spawn) loest /afk-Senden aus, und der
 naechste Sprung (= Ankunft in einer AFK-Area) beendet es. Nach 10 Versuchen ohne neuen Sprung nimmt die Mod an,
 dass du schon in der Area stehst, und hoert auf. Knopf "Jetzt /afk senden", falls du schon am Spawn einschaltest.
+
+==== 1.18.0 ====
+- Auktions-Makro: Regler "Tempo" (1 sicher, 2 schnell = Standard, 3 sehr schnell). Die Wartezeiten zwischen den Schritten
+  (Menue laden, schliessen, Slot-Sync, Pause nach /ah sell) sind je nach Stufe deutlich kuerzer. Stufe 3 kann zu Kicks durch den
+  Spamschutz fuehren.
+- Spawner-Schutz: "Nur an meiner Base" + "Base hier speichern". Am Spawn (ausserhalb des Base-Radius, Standard 40 Bloecke) ruht
+  der Schutz und loest nicht aus. An der Base ist er von selbst wieder scharf. Im Base-Modus schaltet er sich nach dem Ausloesen
+  nicht mehr aus (Rejoin-Schutz). Nach jedem Beitritt wartet er 5 s, bevor er scharf wird.

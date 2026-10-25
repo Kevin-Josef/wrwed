@@ -82,6 +82,42 @@ public final class SpawnerGuard {
 
     public static boolean active() { return phase != Phase.IDLE; }
 
+    private static int joinGrace = 0;
+
+    private static boolean baseMode(ModConfig cfg) {
+        return cfg.spawnerGuardHomeOnly && cfg.spawnerHomeSet;
+    }
+
+    /** Steht der Spieler in der gespeicherten Base (gleiche Welt, innerhalb des Base-Radius)? */
+    public static boolean atBase(MinecraftClient client) {
+        ModConfig cfg = ModConfig.get();
+        ClientPlayerEntity p = client.player;
+        if (!cfg.spawnerHomeSet || p == null || client.world == null) return false;
+        if (!client.world.getRegistryKey().getValue().toString().equals(cfg.spawnerHomeDim)) return false;
+        double dx = p.getX() - cfg.spawnerHomeX, dy = p.getY() - cfg.spawnerHomeY, dz = p.getZ() - cfg.spawnerHomeZ;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz) <= cfg.spawnerHomeRadius;
+    }
+
+    /** Speichert die aktuelle Position als Base. */
+    public static void saveBase(MinecraftClient client) {
+        ClientPlayerEntity p = client.player;
+        if (p == null || client.world == null) return;
+        ModConfig cfg = ModConfig.get();
+        cfg.spawnerHomeX = p.getX();
+        cfg.spawnerHomeY = p.getY();
+        cfg.spawnerHomeZ = p.getZ();
+        cfg.spawnerHomeDim = client.world.getRegistryKey().getValue().toString();
+        cfg.spawnerHomeSet = true;
+        ModConfig.save();
+        status = "Base gespeichert.";
+    }
+
+    public static String baseText() {
+        ModConfig cfg = ModConfig.get();
+        if (!cfg.spawnerHomeSet) return "Base: nicht gespeichert";
+        return String.format(java.util.Locale.ROOT, "Base: %.0f / %.0f / %.0f", cfg.spawnerHomeX, cfg.spawnerHomeY, cfg.spawnerHomeZ);
+    }
+
     private static void reset(MinecraftClient client) {
         if (phase == Phase.MINING && client != null && client.interactionManager != null) {
             client.interactionManager.cancelBlockBreaking();
@@ -150,6 +186,7 @@ public final class SpawnerGuard {
         if (p == null || client.world == null || client.interactionManager == null
                 || client.getNetworkHandler() == null) {
             reset(client);
+            joinGrace = 100; // nach dem (Wieder-)Beitritt 5 s abwarten, bevor der Schutz scharf ist
             return;
         }
         if (!cfg.spawnerGuard) {
@@ -160,6 +197,19 @@ public final class SpawnerGuard {
 
         switch (phase) {
             case IDLE -> {
+                if (joinGrace > 0) {
+                    joinGrace--;
+                    status = "Schutz startet gleich ...";
+                    return;
+                }
+                if (cfg.spawnerGuardHomeOnly) {
+                    if (!cfg.spawnerHomeSet) {
+                        status = "Base nicht gespeichert: Schutz gilt überall.";
+                    } else if (!atBase(client)) {
+                        status = "Außerhalb der Base: Schutz ruht.";
+                        return;
+                    }
+                }
                 PlayerEntity other = nearestPlayer(client, p, cfg.spawnerGuardRadius);
                 if (other == null) {
                     status = "Überwache Umgebung (" + cfg.spawnerGuardRadius + " Blöcke) ...";
@@ -221,12 +271,17 @@ public final class SpawnerGuard {
             status = "Befehl gesendet: " + cmd;
         } else {
             phase = Phase.IDLE;
-            cfg.spawnerGuard = false; // sonst wuerde der Spieler im Radius sofort wieder ausloesen
-            ModConfig.save();
-            status = "Befehl gesendet: " + cmd + " (" + mined + " Spawner abgebaut). Schutz ausgeschaltet, Taste L = wieder an.";
-            if (client.player != null) {
-                client.player.sendMessage(Text.literal("Spawner-Schutz: " + cmd + " ausgeführt, Schutz ausgeschaltet.")
-                        .formatted(Formatting.YELLOW), false);
+            if (baseMode(cfg)) {
+                // Base-Modus: Schutz bleibt an. Am Spawn ruht er und wird an der Base von selbst wieder scharf.
+                status = "Befehl gesendet: " + cmd + " (" + mined + " Spawner abgebaut). Schutz bleibt an (ruht außerhalb der Base).";
+            } else {
+                cfg.spawnerGuard = false; // sonst wuerde der Spieler im Radius sofort wieder ausloesen
+                ModConfig.save();
+                status = "Befehl gesendet: " + cmd + " (" + mined + " Spawner abgebaut). Schutz ausgeschaltet, Taste L = wieder an.";
+                if (client.player != null) {
+                    client.player.sendMessage(Text.literal("Spawner-Schutz: " + cmd + " ausgeführt, Schutz ausgeschaltet.")
+                            .formatted(Formatting.YELLOW), false);
+                }
             }
         }
     }
@@ -401,8 +456,10 @@ public final class SpawnerGuard {
         if (client.getNetworkHandler() == null) { phase = Phase.IDLE; return; }
         status = "Zuletzt verlassen: " + reason + ", " + mined + " Spawner abgebaut.";
         phase = Phase.IDLE;
-        ModConfig.get().spawnerGuard = false; // nach dem Wiederbeitritt nicht sofort erneut ausloesen
-        ModConfig.save();
+        if (!baseMode(ModConfig.get())) {
+            ModConfig.get().spawnerGuard = false; // nach dem Wiederbeitritt nicht sofort erneut ausloesen
+            ModConfig.save();
+        }
         client.getNetworkHandler().getConnection().disconnect(Text.literal("Spawner-Schutz: Server verlassen (" + reason + ")"));
     }
 

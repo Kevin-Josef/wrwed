@@ -53,6 +53,12 @@ public final class AuctionMacro {
     private static Job cur;
     private static Listing best;
     private static int timer;
+
+    /** Wartezeit je nach Tempo-Einstellung (1 sicher, 2 schnell, 3 sehr schnell). */
+    private static int tw(int safe, int fast, int turbo) {
+        int sp = ModConfig.get().macroSpeed;
+        return sp >= 3 ? turbo : sp == 2 ? fast : safe;
+    }
     private static boolean f8Down = false;
     private static boolean sentSell = false;
     private static int countBeforeSell = 0;
@@ -225,7 +231,7 @@ public final class AuctionMacro {
                 if (auctionOpen(client, p)) {
                     int targetAmount = targetAmount(p, cur);
                     Listing l = scan(p, cur.item(), targetAmount);
-                    if (l != null && timer >= 8) {
+                    if (l != null && timer >= tw(8, 4, 2)) {
                         best = l;
                         p.closeHandledScreen();
                         state = State.CLOSING;
@@ -242,7 +248,7 @@ public final class AuctionMacro {
                 }
             }
             case CLOSING -> {
-                if (timer >= 5 && client.currentScreen == null) {
+                if (timer >= tw(5, 2, 1) && client.currentScreen == null) {
                     state = State.SELECT;
                     timer = 0;
                 } else if (timer > 40) {
@@ -262,7 +268,7 @@ public final class AuctionMacro {
                     // Dem Server den gewaehlten Hotbar-Slot sofort mitteilen.
                     p.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(p.getInventory().getSelectedSlot()));
                 }
-                if (timer < 10) return; // Inventar-Wechsel + Slot-Sync beim Server setzen lassen
+                if (timer < tw(10, 5, 3)) return; // Inventar-Wechsel + Slot-Sync beim Server setzen lassen
                 int stackLimit = cur.item().getMaxCount();
                 int have = cfg.macroDryRun ? firstFullStackCount(p, cur.item()) : handCount(p, cur.item());
                 if (have < stackLimit) {
@@ -333,7 +339,7 @@ public final class AuctionMacro {
                 if (cur != null) minCountSeen = Math.min(minCountSeen, count(p, cur.item()));
                 // Manche Auktions-Plugins oeffnen nach /ah sell ein Bestaetigungsmenue.
                 if (auctionOpen(client, p)) {
-                    if (timer < 4) return; // Inhalt vom Server laden lassen
+                    if (timer < tw(4, 3, 2)) return; // Inhalt vom Server laden lassen
                     Slot ok = findConfirmSlot(p);
                     dumpScreen(client);
                     if (ok == null) {
@@ -346,17 +352,17 @@ public final class AuctionMacro {
                     client.interactionManager.clickSlot(p.currentScreenHandler.syncId, ok.id, 0, SlotActionType.PICKUP, p);
                     state = State.DELAY;
                     timer = 0;
-                } else if (timer >= 20) {
+                } else if (timer >= tw(20, 10, 6)) {
                     state = State.DELAY; // kein Menue: Befehl wirkt direkt
                     timer = 0;
                 }
             }
             case DELAY -> {
                 if (sentSell && cur != null) minCountSeen = Math.min(minCountSeen, count(p, cur.item()));
-                if (client.currentScreen instanceof HandledScreen<?> && p.currentScreenHandler != p.playerScreenHandler && timer >= 10) {
+                if (client.currentScreen instanceof HandledScreen<?> && p.currentScreenHandler != p.playerScreenHandler && timer >= tw(10, 4, 3)) {
                     p.closeHandledScreen();
                 }
-                if (timer >= 25) {
+                if (timer >= tw(25, 12, 7)) {
                     // Wiederholen: Wurde etwas eingestellt und ist noch Ware da, dasselbe Item nochmal
                     // (Preis wird dabei in der Auktion neu gelesen).
                     if (sentSell && cur != null) {

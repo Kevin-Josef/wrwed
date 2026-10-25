@@ -40,6 +40,8 @@ public class ModConfig {
     public boolean cellAuto = false;
     /** /ah sell Auto-Preis: so viele Angebote zum guenstigsten Preis muessen da sein, bevor mein Preis sinkt. */
     public int undercutMin = 2;
+    /** Auktions-Makro Tempo: 1 = sicher, 2 = schnell, 3 = sehr schnell (Kick-Gefahr durch Server-Spamschutz). */
+    public int macroSpeed = 2;
     /** Zuletzt automatisch gesetzter Preis pro Item (Registry-ID). */
     public Map<String, Long> lastAutoPrice = new HashMap<>();
     /** AFK-Waechter: Entfernung zum AFK-Platz ab der "Spawn" gilt, und Wartezeit zwischen /afk-Versuchen (Sekunden). */
@@ -99,6 +101,12 @@ public class ModConfig {
     public boolean spawnerGuard = false;
     /** Radius in Bloecken, ab dem ein anderer Spieler den Schutz ausloest. */
     public int spawnerGuardRadius = 50;
+    /** Spawner-Schutz nur in der Naehe der gespeicherten Base aktiv (am Spawn ruht er). */
+    public boolean spawnerGuardHomeOnly = false;
+    public boolean spawnerHomeSet = false;
+    public double spawnerHomeX, spawnerHomeY, spawnerHomeZ;
+    public String spawnerHomeDim = "";
+    public int spawnerHomeRadius = 40;
     /** true = Spawner mit Silk-Touch-Spitzhacke abbauen, false = nur sofort verlassen. */
     public boolean spawnerGuardMine = true;
     /** Nach dem Abbau einen Befehl/Text senden (z. B. /spawn), statt (nur) den Server zu verlassen. */
@@ -143,6 +151,9 @@ public class ModConfig {
                 if (loaded.spawnerGuardCommandText == null) loaded.spawnerGuardCommandText = "/spawn";
                 // Titel ist fest und nicht mehr aenderbar
                 loaded.menuTitle = DEFAULT_TITLE;
+                loaded.macroSpeed = Math.max(1, Math.min(3, loaded.macroSpeed <= 0 ? 2 : loaded.macroSpeed));
+                if (loaded.spawnerHomeDim == null) loaded.spawnerHomeDim = "";
+                loaded.spawnerHomeRadius = Math.max(5, Math.min(300, loaded.spawnerHomeRadius <= 0 ? 40 : loaded.spawnerHomeRadius));
                 if (loaded.lastAutoPrice == null) loaded.lastAutoPrice = new HashMap<>();
                 loaded.undercutMin = Math.max(1, Math.min(10, loaded.undercutMin <= 0 ? 2 : loaded.undercutMin));
                 loaded.afkRadius = Math.max(10, Math.min(300, loaded.afkRadius <= 0 ? 40 : loaded.afkRadius));
