@@ -42,6 +42,10 @@ public class ModConfig {
     public int undercutMin = 2;
     /** Auktions-Makro Tempo: 1 = sicher, 2 = schnell, 3 = sehr schnell (Kick-Gefahr durch Server-Spamschutz). */
     public int macroSpeed = 2;
+    /** Minimi: kleiner Begleiter mit eigenem Skin (Kosmetik). */
+    public boolean minimiEnabled = false;
+    public String minimiSkin = "";
+    public int minimiScale = 35;
     /** Zuletzt automatisch gesetzter Preis pro Item (Registry-ID). */
     public Map<String, Long> lastAutoPrice = new HashMap<>();
     /** AFK-Waechter: Entfernung zum AFK-Platz ab der "Spawn" gilt, und Wartezeit zwischen /afk-Versuchen (Sekunden). */
@@ -154,6 +158,8 @@ public class ModConfig {
                 loaded.macroSpeed = Math.max(1, Math.min(3, loaded.macroSpeed <= 0 ? 2 : loaded.macroSpeed));
                 if (loaded.spawnerHomeDim == null) loaded.spawnerHomeDim = "";
                 loaded.spawnerHomeRadius = Math.max(5, Math.min(300, loaded.spawnerHomeRadius <= 0 ? 40 : loaded.spawnerHomeRadius));
+                if (loaded.minimiSkin == null) loaded.minimiSkin = "";
+                loaded.minimiScale = Math.max(15, Math.min(100, loaded.minimiScale <= 0 ? 35 : loaded.minimiScale));
                 if (loaded.lastAutoPrice == null) loaded.lastAutoPrice = new HashMap<>();
                 loaded.undercutMin = Math.max(1, Math.min(10, loaded.undercutMin <= 0 ? 2 : loaded.undercutMin));
                 loaded.afkRadius = Math.max(10, Math.min(300, loaded.afkRadius <= 0 ? 40 : loaded.afkRadius));

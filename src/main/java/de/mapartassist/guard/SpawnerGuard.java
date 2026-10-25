@@ -467,6 +467,7 @@ public final class SpawnerGuard {
         double best = (double) radius * radius;
         PlayerEntity found = null;
         for (PlayerEntity other : client.world.getPlayers()) {
+            if (de.mapartassist.mini.Minimi.isMini(other)) continue;
             if (other == p || other.isSpectator()) continue;
             double d = p.squaredDistanceTo(other);
             if (d <= best) { best = d; found = other; }

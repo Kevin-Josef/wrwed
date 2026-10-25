@@ -82,6 +82,7 @@ public final class CombatLock {
 
     private static boolean playerNearby(MinecraftClient client, ClientPlayerEntity p) {
         for (PlayerEntity other : client.world.getPlayers()) {
+            if (de.mapartassist.mini.Minimi.isMini(other)) continue;
             if (other != p && p.squaredDistanceTo(other) <= 100.0) return true;
         }
         return false;

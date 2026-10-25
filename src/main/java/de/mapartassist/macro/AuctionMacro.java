@@ -53,6 +53,16 @@ public final class AuctionMacro {
     private static Job cur;
     private static Listing best;
     private static int timer;
+    /** Ticks seit dem letzten gesendeten /ah-Befehl und adaptiver Zuschlag, wenn der Server Befehle verwirft. */
+    private static int sinceCmd = 999;
+    private static int gapPenalty = 0;
+
+    /** Mindestabstand zwischen zwei Befehlen (Server-Befehlssperre). Tempo 1: wie frueher, nur die Wartezeiten. */
+    private static int gap() {
+        int sp = ModConfig.get().macroSpeed;
+        int base = sp >= 3 ? 12 : sp == 2 ? 20 : 0;
+        return base > 0 ? base + gapPenalty : 0;
+    }
 
     /** Wartezeit je nach Tempo-Einstellung (1 sicher, 2 schnell, 3 sehr schnell). */
     private static int tw(int safe, int fast, int turbo) {
@@ -112,6 +122,8 @@ public final class AuctionMacro {
         ModConfig cfg = ModConfig.get();
         queue.clear();
         failedSells = 0;
+        gapPenalty = 0;
+        sinceCmd = 999;
         init();
         for (String id : cfg.sellItems) {
             Item it;
@@ -193,6 +205,7 @@ public final class AuctionMacro {
 
     private static void tickInner(MinecraftClient client) {
         pollDump(client);
+        if (sinceCmd < 100000) sinceCmd++;
         if (watchChat > 0) watchChat--;
         if (state == State.IDLE) return;
 
@@ -206,6 +219,7 @@ public final class AuctionMacro {
 
         switch (state) {
             case NEXT -> {
+                if (sinceCmd < gap()) return; // Befehlssperre des Servers respektieren
                 cur = queue.poll();
                 if (cur == null) { finish("Makro fertig.", Formatting.GREEN); return; }
                 if (!hasFullStack(p, cur.item())) {
@@ -224,6 +238,7 @@ public final class AuctionMacro {
                 String search = Registries.ITEM.getId(cur.item()).getPath();
                 say("Suche günstigstes Angebot: " + search, Formatting.GRAY);
                 p.networkHandler.sendChatCommand("ah " + search);
+                sinceCmd = 0;
                 state = State.WAIT_GUI;
                 timer = 0;
             }
@@ -307,6 +322,7 @@ public final class AuctionMacro {
                     finish("Berechneter Preis ist 0. Abgebrochen.", Formatting.RED);
                     return;
                 }
+                if (sinceCmd < gap()) return; // Abstand zum Such-Befehl einhalten
                 String cmd = "ah sell " + price + " " + amount;
                 String info = amount + "x " + cur.item().getName().getString()
                         + (cur.manual() > 0 ? " (manueller Preis)"
@@ -324,6 +340,7 @@ public final class AuctionMacro {
                     lastServerMsg = "";
                     watchChat = 100;
                     p.networkHandler.sendChatCommand(cmd);
+                    sinceCmd = 0;
                     say("Gesendet: /" + cmd + "   " + info, Formatting.GREEN);
                     say("Hand: " + p.getMainHandStack().getCount() + "x "
                             + p.getMainHandStack().getName().getString() + " (Hotbar-Slot "
@@ -372,8 +389,12 @@ public final class AuctionMacro {
                         // sofort wieder auf, die Menge bleibt dann oft lange gleich. Entscheidend ist
                         // nur, ob (wieder) ein voller Stack in der Hand/im Inventar liegt.
                         boolean sold = minCountSeen < countBeforeSell || now < countBeforeSell;
+                        // Hat der Server den Befehl vermutlich verworfen? Dann Abstand automatisch vergroessern.
+                        if (!sold) gapPenalty = Math.min(40, gapPenalty + 6);
+                        else if (gapPenalty > 0) gapPenalty--;
                         say(sold ? "Nach /ah sell: verkauft/eingestellt."
-                                : "Nach /ah sell: Menge gleich (vermutlich wieder aufgesammelt).",
+                                : "Nach /ah sell: Menge gleich (vermutlich wieder aufgesammelt)."
+                                + (lastServerMsg.isEmpty() ? "" : " Server: " + lastServerMsg),
                                 sold ? Formatting.GREEN : Formatting.YELLOW);
                         if (cfg.macroRepeat && hasFullStack(p, cur.item())) {
                             // Die Inventarmenge ist kein sicherer Beleg dafuer, dass der Server

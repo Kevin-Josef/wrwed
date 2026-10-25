@@ -11,6 +11,7 @@ import de.mapartassist.macro.AfkGuard;
 import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.macro.SellMacro;
+import de.mapartassist.mini.Minimi;
 import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.client.gui.DrawContext;
@@ -57,6 +58,7 @@ public class MenuScreen extends Screen {
         AFK("Makros", "AFK-Wächter"),
         CAPES("Kosmetik", "Capes"),
         CREATOR("Kosmetik", "Cape Creator"),
+        MINIMI("Kosmetik", "Minimi"),
         CALC(null, "Taschenrechner"),
         MAPART("Litematica", "Map Art"),
         PROGRESS("Litematica", "Fortschritt"),
@@ -81,6 +83,7 @@ public class MenuScreen extends Screen {
     private static int macroScroll = 0;
     private static int recScroll = 0;
     private static int sellScroll = 0;
+    private static int miniScroll = 0;
     private static String cellStatus = "";
     private static int progScroll = 0;
     private int progSeen = -1;
@@ -237,7 +240,7 @@ public class MenuScreen extends Screen {
 
     /** Kleiner Icon-Knopf oben rechts (Design). */
     private class IconBtn extends Control {
-        final int kind; // 0 = Design
+        final int kind; // 0 = Design, 1 = Freecam
         final String tip;
         final BooleanSupplier on;
         final Runnable run;
@@ -262,6 +265,13 @@ public class MenuScreen extends Screen {
                     ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
                     ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, sel ? 0xFFFFFFFF : acc);
                 }
+            } else {
+                // Auge (Freecam)
+                ctx.fill(x + 3, y + 6, x + w - 3, y + 7, lc);
+                ctx.fill(x + 3, y + 11, x + w - 3, y + 12, lc);
+                ctx.fill(x + 2, y + 7, x + 3, y + 11, lc);
+                ctx.fill(x + w - 3, y + 7, x + w - 2, y + 11, lc);
+                ctx.fill(x + 7, y + 7, x + 11, y + 11, sel ? 0xFFFFFFFF : acc);
             }
             if (hover > 0.5f) text(ctx, tip, x + w - textRenderer.getWidth(tip), y + 22, 0xFF9A9AA8);
         }
@@ -492,6 +502,27 @@ public class MenuScreen extends Screen {
         }
     }
 
+    private class MiniRow extends Control {
+        final String name;
+
+        MiniRow(int x, int y, int w, String name) {
+            this.x = x; this.y = y; this.w = w; this.h = 26; this.name = name;
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            animateHover(mx, my, true);
+            boolean sel = name.equals(ModConfig.get().minimiSkin);
+            int acc = Theme.accent();
+            ctx.fill(x, y, x + w, y + h, mix(sel ? alpha(acc, 0.25f) : 0xFF262631, alpha(acc, 0.30f), hover * 0.6f));
+            if (sel) ctx.fill(x, y, x + 3, y + h, acc);
+            text(ctx, shorten(name.replaceAll("(?i)\\.png$", ""), 26), x + 10, y + 9, sel ? 0xFFFFFFFF : 0xFFDDDDDD);
+        }
+
+        @Override
+        void press(int mx, int my) { Minimi.select(name); }
+    }
+
     private class RecRow extends Control {
         final MovementRecorder.Rec r;
 
@@ -614,6 +645,8 @@ public class MenuScreen extends Screen {
         titleField = null;
         fields.clear();
 
+        controls.add(new IconBtn(left + W - 50, top + 12, 1, "Freecam", () -> activeTab == Tab.FREECAM || Freecam.active(), () ->
+                openTab(activeTab == Tab.FREECAM ? Tab.HOME : Tab.FREECAM)));
         controls.add(new IconBtn(left + W - 28, top + 12, 0, "Design", () -> activeTab == Tab.SETTINGS, () ->
                 openTab(activeTab == Tab.SETTINGS ? Tab.HOME : Tab.SETTINGS)));
         controls.add(new Btn(left + W - 96, top + H - 30, 80, 20, () -> "Fertig", this::close));
@@ -626,6 +659,7 @@ public class MenuScreen extends Screen {
             case MAPART -> buildMapArt();
             case SETTINGS -> buildSettings();
             case CAPES -> buildCapes();
+            case MINIMI -> buildMinimi();
             case CREATOR -> buildCreator();
             case AUCTION -> buildMacros();
             case HT1 -> buildHt1();
@@ -656,8 +690,8 @@ public class MenuScreen extends Screen {
             new Group("Verkauf", 0, 0, new Tab[]{Tab.AUCTION, Tab.SELL}),
             new Group("Litematica", 0, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
             new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
-            new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES}),
-            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK, Tab.FREECAM}),
+            new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.MINIMI}),
+            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
     };
     private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
@@ -684,6 +718,7 @@ public class MenuScreen extends Screen {
             case MAPART -> Items.FILLED_MAP;
             case PROGRESS -> Items.WRITABLE_BOOK;
             case CAPES -> Items.ELYTRA;
+            case MINIMI -> Items.PLAYER_HEAD;
             case CREATOR -> Items.PAINTING;
             case CALC -> Items.COMPARATOR;
             default -> Items.PINK_DYE;
@@ -709,6 +744,7 @@ public class MenuScreen extends Screen {
             case RECORDER -> "Aufnehmen & Loop";
             case PROGRESS -> "Prozent & Blöcke";
             case CAPES -> "Bibliothek";
+            case MINIMI -> "Kleiner Begleiter";
             case CREATOR -> "Bild zu Cape";
             case CALC -> "Mit Verlauf";
             case FREECAM -> "Frei fliegen";
@@ -724,6 +760,7 @@ public class MenuScreen extends Screen {
             case SELL -> SellMacro.running() ? "LÄUFT" : c.cellAuto ? "AUTO" : "AUS";
             case REPAIR -> AutoRepair.running() ? "LÄUFT" : c.repairEnabled ? "AN" : "AUS";
             case AFK -> AfkGuard.active() ? "AN" : "AUS";
+            case MINIMI -> c.minimiEnabled ? "AN" : "AUS";
             case FREECAM -> Freecam.active() ? "AN" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
             case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
@@ -929,6 +966,40 @@ public class MenuScreen extends Screen {
         }).enabledIf(() -> !SellMacro.running() && !ModConfig.get().cellItems.isEmpty()));
         controls.add(new Btn(rx + hw + 4, cy + 104, hw, 20, () -> "Stopp", SellMacro::stop)
                 .enabledIf(SellMacro::running));
+    }
+
+    private static final int MINI_ROWS = 5;
+
+    private void buildMinimi() {
+        ModConfig cfg = ModConfig.get();
+        List<String> skins = Minimi.list();
+        int maxScroll = Math.max(0, skins.size() - MINI_ROWS);
+        miniScroll = Math.max(0, Math.min(miniScroll, maxScroll));
+        for (int i = 0; i < MINI_ROWS; i++) {
+            int idx = miniScroll + i;
+            if (idx >= skins.size()) break;
+            controls.add(new MiniRow(cx + 6, cy + 26 + i * 28, LIST_W - 12, skins.get(idx)));
+        }
+        int ay = cy + 26 + MINI_ROWS * 28 + 2;
+        controls.add(new Btn(cx + 6, ay, 28, 18, () -> "▲", () -> { miniScroll--; clearAndInit(); })
+                .enabledIf(() -> miniScroll > 0));
+        controls.add(new Btn(cx + 38, ay, 28, 18, () -> "▼", () -> { miniScroll++; clearAndInit(); })
+                .enabledIf(() -> miniScroll < maxScroll));
+
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        controls.add(new Tog(rx - 6, cy + 26, rw + 12, "Minimi anzeigen", () -> cfg.minimiEnabled, v -> { cfg.minimiEnabled = v; ModConfig.save(); }));
+        controls.add(new Sld(rx + 2, cy + 56, rw - 4, "Größe", " %", 15, 100,
+                () -> cfg.minimiScale, v -> cfg.minimiScale = v));
+        controls.add(new Btn(rx, cy + 90, rw, 18, () -> "Skin-Ordner öffnen", () -> {
+            try {
+                java.nio.file.Files.createDirectories(Minimi.dir());
+                net.minecraft.util.Util.getOperatingSystem().open(Minimi.dir().toUri());
+            } catch (Exception ex) {
+                Minimi.status = "Ordner konnte nicht geöffnet werden.";
+            }
+        }));
+        controls.add(new Btn(rx, cy + 112, rw, 18, () -> "Standard-Skin (keiner)", () -> Minimi.select(""))
+                .enabledIf(() -> !cfg.minimiSkin.isEmpty()));
     }
 
     private void buildAfk() {
@@ -1233,6 +1304,16 @@ public class MenuScreen extends Screen {
                 if (err == null) ModConfig.get().bgStyle = 6;
                 else BackgroundImage.status = err;
             }
+            return;
+        }
+        if (activeTab == Tab.MINIMI) {
+            for (Path p : paths) {
+                String err = Minimi.importFile(p);
+                if (err != null) Minimi.status = err;
+            }
+            ModConfig.get().minimiEnabled = true;
+            ModConfig.save();
+            clearAndInit();
             return;
         }
         if (activeTab == Tab.CREATOR) {
@@ -1587,6 +1668,10 @@ public class MenuScreen extends Screen {
                 card(ctx, px, cy - 4, left + W - 14 - px, 196, "Menü");
             }
             case FREECAM -> card(ctx, cx, cy - 4, COL, 158, "Freecam");
+            case MINIMI -> {
+                card(ctx, cx, cy - 4, LIST_W, 194, "Skins");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Minimi");
+            }
             case AFK -> {
                 card(ctx, cx, cy - 4, COL, 158, "AFK-Wächter");
                 card(ctx, cx + COL2, cy - 4, COL, 158, "So funktioniert es");
@@ -1655,6 +1740,7 @@ public class MenuScreen extends Screen {
             case RECORDER -> renderRecorder(ctx);
             case SELL -> renderSell(ctx);
             case AFK -> renderAfk(ctx);
+            case MINIMI -> renderMinimi(ctx);
             case REPAIR -> renderRepair(ctx);
             case PROGRESS -> renderProgress(ctx);
             case HOME -> renderHome(ctx);
@@ -1681,6 +1767,19 @@ public class MenuScreen extends Screen {
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");
         text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
                 left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);
+    }
+
+    private void renderMinimi(DrawContext ctx) {
+        if (Minimi.list().isEmpty()) {
+            text(ctx, "Noch kein Skin.", cx + 12, cy + 32, 0xFF999999);
+            text(ctx, "Eine Skin-Datei (PNG) einfach", cx + 12, cy + 46, 0xFF777783);
+            text(ctx, "in dieses Fenster ziehen.", cx + 12, cy + 58, 0xFF777783);
+        }
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        drawWrapped(ctx, "Ein kleiner Begleiter läuft dir hinterher (nur bei dir sichtbar). Skin-PNG (64x64 oder 64x32) ins Fenster ziehen oder aus der Liste wählen.",
+                rx, cy + 138, rw, 0xFF777783);
+        String st = Minimi.status;
+        text(ctx, st == null ? "" : shorten(st, 78), cx, top + H - 24, 0xFFFFD866);
     }
 
     private void renderAfk(DrawContext ctx) {

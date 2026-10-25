@@ -4,6 +4,7 @@ import de.mapartassist.cam.Freecam;
 import de.mapartassist.combat.CombatLock;
 import de.mapartassist.litematica.SchematicProgress;
 import de.mapartassist.macro.AfkGuard;
+import de.mapartassist.mini.Minimi;
 import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.macro.SellMacro;
@@ -116,6 +117,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
         ClientTickEvents.END_CLIENT_TICK.register(SellMacro::tick);
         ClientTickEvents.END_CLIENT_TICK.register(AfkGuard::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(Minimi::tick);
         ClientTickEvents.END_CLIENT_TICK.register(AutoRepair::tick);
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
         ClientTickEvents.END_CLIENT_TICK.register(SpawnerGuard::tick);

@@ -110,3 +110,11 @@ dass du schon in der Area stehst, und hoert auf. Knopf "Jetzt /afk senden", fall
 - Spawner-Schutz: "Nur an meiner Base" + "Base hier speichern". Am Spawn (ausserhalb des Base-Radius, Standard 40 Bloecke) ruht
   der Schutz und loest nicht aus. An der Base ist er von selbst wieder scharf. Im Base-Modus schaltet er sich nach dem Ausloesen
   nicht mehr aus (Rejoin-Schutz). Nach jedem Beitritt wartet er 5 s, bevor er scharf wird.
+
+==== 1.19.0 ====
+- Auktions-Makro: Zwischen /ah-Befehlen gilt ein Mindestabstand (Tempo 2: 1,0 s, Tempo 3: 0,6 s, Tempo 1: wie frueher). Bei
+  Fehlschlaegen (Menge unveraendert) wird der Abstand automatisch groesser. Server-Meldungen werden im Chat mit angezeigt.
+  Das war vermutlich der Grund, warum bei Tempo > 1 nichts verkauft wurde: Der Server verwirft zu schnelle Befehle.
+- Minimi (Kosmetik > Minimi): kleiner Begleiter mit eigenem Skin. PNG-Skin (64x64 oder altes 64x32) ins Fenster ziehen; die Mod
+  erkennt schmale Arme (Alex) automatisch. Nur bei dir sichtbar. Groesse einstellbar.
+- Freecam: Symbol oben rechts neben Design (die Kachel entfiel, weil die Startseite einen Platz fuer Minimi brauchte).
