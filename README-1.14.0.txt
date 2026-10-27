@@ -134,3 +134,7 @@ Bricht die Suche nach mehreren Seiten ab, steht der Menue-Inhalt in config/mapar
 Axt gegen Schild (Automatik > HT1 Combat Lock > "Axt gegen Schild"): Haelt der Spieler im Fadenkreuz sein Schild hoch,
 wechselt die Mod pro Frame sofort auf eine Axt aus der Hotbar. Laesst er das Schild runter (oder schaut er weg), geht es nach
 0,15 s zurueck auf das vorherige Item. Wechselst du selbst, wird nichts zurueckgesetzt.
+
+==== 1.20.1 ====
+Axt gegen Schild: Die Mod wechselt jetzt nicht nur auf die Axt, sie schlaegt auch selbst zu (ein Schlag, deaktiviert das Schild)
+und wechselt im selben Frame wieder auf das vorherige Item zurueck. Mindestabstand 0,35 s zwischen automatischen Schlaegen.
