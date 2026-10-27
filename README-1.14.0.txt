@@ -129,3 +129,8 @@ dass du schon in der Area stehst, und hoert auf. Knopf "Jetzt /afk senden", fall
 Auktions-Makro Seiten-Blaettern: Nach einem Seitenwechsel wartet die Mod laenger (Server verschluckt sonst schnelle Klicks)
 und klickt "Naechste Seite" bis zu 3x erneut, wenn sich der Inhalt nicht aendert, bevor sie von "letzter Seite" ausgeht.
 Bricht die Suche nach mehreren Seiten ab, steht der Menue-Inhalt in config/mapartassist/ah-dump.txt.
+
+==== 1.20.0 ====
+Axt gegen Schild (Automatik > HT1 Combat Lock > "Axt gegen Schild"): Haelt der Spieler im Fadenkreuz sein Schild hoch,
+wechselt die Mod pro Frame sofort auf eine Axt aus der Hotbar. Laesst er das Schild runter (oder schaut er weg), geht es nach
+0,15 s zurueck auf das vorherige Item. Wechselst du selbst, wird nichts zurueckgesetzt.

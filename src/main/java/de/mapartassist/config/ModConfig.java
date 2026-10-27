@@ -99,6 +99,8 @@ public class ModConfig {
     public boolean macroRepeat = true;
     /** HT1 Combat Lock: bei Schaden sofort den Server verlassen. */
     public boolean combatLock = false;
+    /** Axt gegen Schild: bei blockendem Gegner im Fadenkreuz automatisch auf die Axt wechseln. */
+    public boolean shieldAxe = false;
     /** Nur ausloesen, wenn ein anderer Spieler in der Naehe ist (ignoriert Fall-/Feuer-/Hungerschaden). */
     public boolean combatLockNeedsPlayer = true;
     /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */

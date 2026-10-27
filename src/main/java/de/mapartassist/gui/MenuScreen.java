@@ -1178,6 +1178,8 @@ public class MenuScreen extends Screen {
                 () -> cfg.combatLockNeedsPlayer, v -> { cfg.combatLockNeedsPlayer = v; ModConfig.save(); }));
         controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Verzögerung", " s", 0, 19,
                 () -> Math.max(0, Math.min(19, cfg.combatLockDelaySec)), v -> cfg.combatLockDelaySec = v));
+        controls.add(new Tog(cx + COL2 + 6, cy + 126, COL - 12, "Axt gegen Schild",
+                () -> cfg.shieldAxe, v -> { cfg.shieldAxe = v; ModConfig.save(); }));
     }
 
     private void buildSpawner() {

@@ -2,6 +2,7 @@ package de.mapartassist;
 
 import de.mapartassist.cam.Freecam;
 import de.mapartassist.combat.CombatLock;
+import de.mapartassist.combat.ShieldBreaker;
 import de.mapartassist.litematica.SchematicProgress;
 import de.mapartassist.macro.AfkGuard;
 import de.mapartassist.mini.Minimi;
@@ -182,6 +183,7 @@ public class MapArtAssistClient implements ClientModInitializer {
                     onFrame(MinecraftClient.getInstance());
                     CombatLock.check(MinecraftClient.getInstance());
                     Freecam.update(MinecraftClient.getInstance());
+                    ShieldBreaker.frame(MinecraftClient.getInstance());
                 });
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "progress_hud"),
