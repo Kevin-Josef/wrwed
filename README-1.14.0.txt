@@ -124,3 +124,8 @@ dass du schon in der Area stehst, und hoert auf. Knopf "Jetzt /afk senden", fall
   gesuchten Items gefunden ist (max. 40 Seiten). Wechselt der Inhalt nach dem Klick nicht mehr, gilt das als letzte Seite.
 - Preis-Zwischenspeicher: Ein frisch gesuchter Preis wird 20 s fuer dieselbe Sorte wiederverwendet (priceCacheSec in der Config,
   0 = immer neu suchen). Das spart bei wiederholten Verkaeufen den Such-Befehl: 1 statt 2 Befehle pro Verkauf.
+
+==== 1.19.2 ====
+Auktions-Makro Seiten-Blaettern: Nach einem Seitenwechsel wartet die Mod laenger (Server verschluckt sonst schnelle Klicks)
+und klickt "Naechste Seite" bis zu 3x erneut, wenn sich der Inhalt nicht aendert, bevor sie von "letzter Seite" ausgeht.
+Bricht die Suche nach mehreren Seiten ab, steht der Menue-Inhalt in config/mapartassist/ah-dump.txt.

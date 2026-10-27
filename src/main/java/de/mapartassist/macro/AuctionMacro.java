@@ -56,7 +56,7 @@ public final class AuctionMacro {
 
     // Seiten-Blaettern im Auktionsmenue
     private static final int MAX_PAGES = 40;
-    private static int pageCount, pageSigBefore;
+    private static int pageCount, pageSigBefore, pageRetries;
     private static boolean pagePending;
     /** Zeitpunkt der letzten echten Preissuche je Item (fuer den kurzen Preis-Zwischenspeicher). */
     private static final java.util.Map<Item, Long> scanAt = new java.util.HashMap<>();
@@ -86,6 +86,7 @@ public final class AuctionMacro {
     }
 
     private static void notFound(ClientPlayerEntity p, int targetAmount) {
+        if (pageCount > 0) dumpScreen(MinecraftClient.getInstance()); // Diagnose: config/mapartassist/ah-dump.txt
         p.closeHandledScreen();
         say("Kein Angebot für " + targetAmount + "x " + cur.item().getName().getString()
                 + " gefunden (" + (pageCount + 1) + " Seite(n) durchsucht), überspringe.", Formatting.YELLOW);
@@ -275,6 +276,7 @@ public final class AuctionMacro {
                     return;
                 }
                 pageCount = 0;
+                pageRetries = 0;
                 pagePending = false;
                 // Preis-Zwischenspeicher: gleiche Sorte kurz nach einer Suche braucht keine neue Suche (1 Befehl statt 2).
                 if (cfg.priceCacheSec > 0) {
@@ -303,15 +305,26 @@ public final class AuctionMacro {
                         // Nach dem Seitenwechsel auf neuen Inhalt warten
                         if (timer < 3) return;
                         if (pageSignature(p) == pageSigBefore) {
-                            if (timer < 20) return;
-                            notFound(p, targetAmount); // Inhalt aendert sich nicht: letzte Seite erreicht
+                            if (timer < 14) return;
+                            // Inhalt unveraendert: Klick wurde evtl. vom Server verschluckt -> bis zu 3x erneut klicken
+                            if (pageRetries < 3) {
+                                Slot again = findNextPage(p);
+                                if (again != null) {
+                                    client.interactionManager.clickSlot(p.currentScreenHandler.syncId, again.id, 0, SlotActionType.PICKUP, p);
+                                    pageRetries++;
+                                    timer = 0;
+                                    return;
+                                }
+                            }
+                            notFound(p, targetAmount); // weiterhin unveraendert: letzte Seite erreicht
                             return;
                         }
                         pagePending = false;
+                        pageRetries = 0;
                         timer = 0;
                         return;
                     }
-                    int minWait = pageCount == 0 ? tw(8, 4, 2) : tw(3, 2, 1);
+                    int minWait = pageCount == 0 ? tw(8, 4, 2) : tw(8, 7, 6); // nach einem Seitenwechsel dem Server Zeit geben
                     Listing l = scan(p, cur.item(), targetAmount);
                     if (l != null && timer >= minWait) {
                         scanAt.put(cur.item(), System.currentTimeMillis());
@@ -326,6 +339,7 @@ public final class AuctionMacro {
                             pageSigBefore = pageSignature(p);
                             client.interactionManager.clickSlot(p.currentScreenHandler.syncId, next.id, 0, SlotActionType.PICKUP, p);
                             pageCount++;
+                            pageRetries = 0;
                             pagePending = true;
                             timer = 0;
                         } else if (timer > (pageCount == 0 ? 70 : 40)) {
