@@ -53,6 +53,45 @@ public final class AuctionMacro {
     private static Job cur;
     private static Listing best;
     private static int timer;
+
+    // Seiten-Blaettern im Auktionsmenue
+    private static final int MAX_PAGES = 40;
+    private static int pageCount, pageSigBefore;
+    private static boolean pagePending;
+    /** Zeitpunkt der letzten echten Preissuche je Item (fuer den kurzen Preis-Zwischenspeicher). */
+    private static final java.util.Map<Item, Long> scanAt = new java.util.HashMap<>();
+
+    private static int pageSignature(ClientPlayerEntity p) {
+        int h = 17;
+        for (Slot s : p.currentScreenHandler.slots) {
+            if (s.inventory instanceof PlayerInventory) continue;
+            ItemStack st = s.getStack();
+            if (st.isEmpty()) { h = h * 31; continue; }
+            h = h * 31 + Registries.ITEM.getId(st.getItem()).hashCode() * 7 + st.getCount() * 13
+                    + (int) (readPrice(st) & 0x7fffffffL);
+        }
+        return h;
+    }
+
+    /** "Naechste Seite"-Knopf im Auktionsmenue (blauer Pfeil, Item mit diesem Namen). */
+    private static Slot findNextPage(ClientPlayerEntity p) {
+        for (Slot s : p.currentScreenHandler.slots) {
+            if (s.inventory instanceof PlayerInventory) continue;
+            ItemStack st = s.getStack();
+            if (st.isEmpty()) continue;
+            String n = st.getName().getString().toLowerCase();
+            if (n.contains("nächste") || n.contains("naechste") || n.contains("next page") || n.contains("next")) return s;
+        }
+        return null;
+    }
+
+    private static void notFound(ClientPlayerEntity p, int targetAmount) {
+        p.closeHandledScreen();
+        say("Kein Angebot für " + targetAmount + "x " + cur.item().getName().getString()
+                + " gefunden (" + (pageCount + 1) + " Seite(n) durchsucht), überspringe.", Formatting.YELLOW);
+        state = State.DELAY;
+        timer = 0;
+    }
     /** Ticks seit dem letzten gesendeten /ah-Befehl und adaptiver Zuschlag, wenn der Server Befehle verwirft. */
     private static int sinceCmd = 999;
     private static int gapPenalty = 0;
@@ -235,6 +274,21 @@ public final class AuctionMacro {
                     timer = 0;
                     return;
                 }
+                pageCount = 0;
+                pagePending = false;
+                // Preis-Zwischenspeicher: gleiche Sorte kurz nach einer Suche braucht keine neue Suche (1 Befehl statt 2).
+                if (cfg.priceCacheSec > 0) {
+                    Long at = scanAt.get(cur.item());
+                    Long lastP = cfg.lastAutoPrice.get(Registries.ITEM.getId(cur.item()).toString());
+                    if (at != null && lastP != null && lastP > 0
+                            && System.currentTimeMillis() - at < cfg.priceCacheSec * 1000L) {
+                        best = new Listing(lastP, cur.item().getMaxCount(), 99);
+                        say("Preis aus Zwischenspeicher: " + lastP, Formatting.GRAY);
+                        state = State.SELECT;
+                        timer = 0;
+                        return;
+                    }
+                }
                 String search = Registries.ITEM.getId(cur.item()).getPath();
                 say("Suche günstigstes Angebot: " + search, Formatting.GRAY);
                 p.networkHandler.sendChatCommand("ah " + search);
@@ -245,18 +299,38 @@ public final class AuctionMacro {
             case WAIT_GUI -> {
                 if (auctionOpen(client, p)) {
                     int targetAmount = targetAmount(p, cur);
+                    if (pagePending) {
+                        // Nach dem Seitenwechsel auf neuen Inhalt warten
+                        if (timer < 3) return;
+                        if (pageSignature(p) == pageSigBefore) {
+                            if (timer < 20) return;
+                            notFound(p, targetAmount); // Inhalt aendert sich nicht: letzte Seite erreicht
+                            return;
+                        }
+                        pagePending = false;
+                        timer = 0;
+                        return;
+                    }
+                    int minWait = pageCount == 0 ? tw(8, 4, 2) : tw(3, 2, 1);
                     Listing l = scan(p, cur.item(), targetAmount);
-                    if (l != null && timer >= tw(8, 4, 2)) {
+                    if (l != null && timer >= minWait) {
+                        scanAt.put(cur.item(), System.currentTimeMillis());
                         best = l;
                         p.closeHandledScreen();
                         state = State.CLOSING;
                         timer = 0;
-                    } else if (timer > 70) {
-                        p.closeHandledScreen();
-                        say("Kein Angebot für " + targetAmount(p, cur) + "x "
-                                + cur.item().getName().getString() + " gefunden, überspringe.", Formatting.YELLOW);
-                        state = State.DELAY;
-                        timer = 0;
+                    } else if (timer >= minWait + 4) {
+                        // Auf dieser Seite kein voller Stack: weiterblaettern
+                        Slot next = findNextPage(p);
+                        if (next != null && pageCount < MAX_PAGES) {
+                            pageSigBefore = pageSignature(p);
+                            client.interactionManager.clickSlot(p.currentScreenHandler.syncId, next.id, 0, SlotActionType.PICKUP, p);
+                            pageCount++;
+                            pagePending = true;
+                            timer = 0;
+                        } else if (timer > (pageCount == 0 ? 70 : 40)) {
+                            notFound(p, targetAmount);
+                        }
                     }
                 } else if (timer > 80) {
                     finish("Auktionsmenü hat sich nicht geöffnet. Abgebrochen.", Formatting.RED);

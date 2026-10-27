@@ -118,3 +118,9 @@ dass du schon in der Area stehst, und hoert auf. Knopf "Jetzt /afk senden", fall
 - Minimi (Kosmetik > Minimi): kleiner Begleiter mit eigenem Skin. PNG-Skin (64x64 oder altes 64x32) ins Fenster ziehen; die Mod
   erkennt schmale Arme (Alex) automatisch. Nur bei dir sichtbar. Groesse einstellbar.
 - Freecam: Symbol oben rechts neben Design (die Kachel entfiel, weil die Startseite einen Platz fuer Minimi brauchte).
+
+==== 1.19.1 ====
+- Auktions-Makro blaettert jetzt durch die Seiten des Auktionsmenues (Knopf "Naechste Seite"), bis ein voller Stack des
+  gesuchten Items gefunden ist (max. 40 Seiten). Wechselt der Inhalt nach dem Klick nicht mehr, gilt das als letzte Seite.
+- Preis-Zwischenspeicher: Ein frisch gesuchter Preis wird 20 s fuer dieselbe Sorte wiederverwendet (priceCacheSec in der Config,
+  0 = immer neu suchen). Das spart bei wiederholten Verkaeufen den Such-Befehl: 1 statt 2 Befehle pro Verkauf.

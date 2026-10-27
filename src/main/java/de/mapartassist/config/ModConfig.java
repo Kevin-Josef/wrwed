@@ -42,6 +42,8 @@ public class ModConfig {
     public int undercutMin = 2;
     /** Auktions-Makro Tempo: 1 = sicher, 2 = schnell, 3 = sehr schnell (Kick-Gefahr durch Server-Spamschutz). */
     public int macroSpeed = 2;
+    /** Sekunden, in denen ein frisch gesuchter Preis wiederverwendet wird (0 = immer neu suchen). */
+    public int priceCacheSec = 20;
     /** Minimi: kleiner Begleiter mit eigenem Skin (Kosmetik). */
     public boolean minimiEnabled = false;
     public String minimiSkin = "";

@@ -516,7 +516,7 @@ public class MenuScreen extends Screen {
             int acc = Theme.accent();
             ctx.fill(x, y, x + w, y + h, mix(sel ? alpha(acc, 0.25f) : 0xFF262631, alpha(acc, 0.30f), hover * 0.6f));
             if (sel) ctx.fill(x, y, x + 3, y + h, acc);
-            text(ctx, shorten(name.replaceAll("(?i)\\.png$", ""), 26), x + 10, y + 9, sel ? 0xFFFFFFFF : 0xFFDDDDDD);
+            text(ctx, shorten(name.toLowerCase().endsWith(".png") ? name.substring(0, name.length() - 4) : name, 26), x + 10, y + 9, sel ? 0xFFFFFFFF : 0xFFDDDDDD);
         }
 
         @Override
