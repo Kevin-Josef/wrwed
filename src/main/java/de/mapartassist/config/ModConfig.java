@@ -99,12 +99,13 @@ public class ModConfig {
     public boolean macroRepeat = true;
     /** HT1 Combat Lock: bei Schaden sofort den Server verlassen. */
     public boolean combatLock = false;
-    /** Axt gegen Schild: bei blockendem Gegner im Fadenkreuz automatisch auf die Axt wechseln. */
-    public boolean shieldAxe = false;
     /** Nur ausloesen, wenn ein anderer Spieler in der Naehe ist (ignoriert Fall-/Feuer-/Hungerschaden). */
     public boolean combatLockNeedsPlayer = true;
     /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */
     public int combatLockDelaySec = 0;
+    /** Crystal-Limit: auf einem Obsidian maximal 2 Crystals pro Zeitfenster (1-5 Sekunden). */
+    public boolean crystalLimit = false;
+    public int crystalLimitSec = 3;
     /** Spawner-AFK-Schutz: bei fremdem Spieler im Radius Spawner abbauen und Server verlassen. */
     public boolean spawnerGuard = false;
     /** Radius in Bloecken, ab dem ein anderer Spieler den Schutz ausloest. */
@@ -181,6 +182,7 @@ public class ModConfig {
                 loaded.bgStyle = Math.max(0, Math.min(7, loaded.bgStyle));
                 loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
                 loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
+                loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 3 : loaded.crystalLimitSec));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
                 INSTANCE = loaded;
                 save();

@@ -56,6 +56,7 @@ public class MenuScreen extends Screen {
         RECORDER("Makros", "Bewegungs-Recorder"),
         REPAIR("Makros", "Auto-Reparatur"),
         AFK("Makros", "AFK-Wächter"),
+        CRYSTAL("Extras", "Crystal-Limit"),
         CAPES("Kosmetik", "Capes"),
         CREATOR("Kosmetik", "Cape Creator"),
         MINIMI("Kosmetik", "Minimi"),
@@ -101,6 +102,13 @@ public class MenuScreen extends Screen {
     private float tabChangeAt = -10f;
     private String hoverCape = null;
 
+    // Startseite: Kategorie-Kreise mit aufklappenden Symbolen
+    private static int openCat = -1;
+    private static final float[] catAmt = new float[5];
+    private float lastFrameT = 0f;
+    private String tipText = null;
+    private int tipX, tipY;
+
     // Farbwaehler
     private float hue, sat, val;
     private TextFieldWidget hexField, cmdField, titleField;
@@ -111,6 +119,8 @@ public class MenuScreen extends Screen {
         super(Text.literal("Mod-Menü"));
         this.parent = parent;
         activeTab = Tab.HOME; // Menue startet immer auf der Startseite
+        openCat = -1;
+        java.util.Arrays.fill(catAmt, 0f);
         CapeManager.scan();
         CapePreview.clear();
     }
@@ -200,37 +210,106 @@ public class MenuScreen extends Screen {
         }
     }
 
-    /** Kachel auf der Startseite (kompakt, ein Bereich pro Gruppe). */
-    private class Tile extends Control {
-        final Tab tab;
+    /** Kategorie-Kreis auf der Startseite. Klick klappt die Symbole rundherum auf. */
+    private class CatCircle extends Control {
+        final int idx;
 
-        Tile(int x, int y, int w, int h, Tab tab) {
-            this.x = x; this.y = y; this.w = w; this.h = h; this.tab = tab;
+        CatCircle(int idx) {
+            this.idx = idx;
+            int r = CAT_R;
+            this.x = catCx(idx) - r; this.y = catCy() - r; this.w = r * 2; this.h = r * 2;
+        }
+
+        @Override
+        boolean contains(int mx, int my) {
+            int dx = mx - catCx(idx), dy = my - catCy();
+            return dx * dx + dy * dy <= CAT_R * CAT_R;
+        }
+
+        private boolean anyActive() {
+            for (Tab t : CATS[idx].tabs()) {
+                String st = tileStatus(t);
+                if (st != null && !st.equals("AUS")) return true;
+            }
+            return false;
         }
 
         @Override
         void draw(DrawContext ctx, int mx, int my) {
             animateHover(mx, my, true);
+            float a = catAmt[idx];
+            float k = Math.max(hover * 0.8f, a);
             int acc = Theme.accent();
-            int yy = y - Math.round(hover * 2);
-            ctx.fill(x, yy, x + w, yy + h, mix(0xFF262631, alpha(acc, 0.30f), hover * 0.85f));
-            outline(ctx, x, yy, w, h, alpha(acc, 0.18f + 0.55f * hover));
-            ctx.fill(x, yy, x + Math.round(w * (0.25f + 0.75f * hover)), yy + 2, acc);
+            int ccx = catCx(idx), ccy = catCy();
+            int lift = Math.round(hover * 2f);
 
-            ctx.fill(x + 8, yy + 8, x + 38, yy + 38, alpha(acc, 0.16f + 0.14f * hover));
-            outline(ctx, x + 8, yy + 8, 30, 30, alpha(acc, 0.35f));
-            Item it = tileItem(tab);
-            ctx.drawItem(new ItemStack(it), x + 15, yy + 15);
+            if (k > 0.02f) fillCircle(ctx, ccx, ccy - lift, CAT_R + 5, alpha(acc, 0.08f + 0.16f * k));
+            fillCircle(ctx, ccx, ccy - lift, CAT_R + 1, alpha(acc, 0.35f + 0.65f * k));
+            fillCircle(ctx, ccx, ccy - lift, CAT_R, mix(0xFF262631, 0xFF000000 | (acc & 0xFFFFFF), 0.10f + 0.30f * k));
+            ctx.drawItem(new ItemStack(CATS[idx].icon()), ccx - 8, ccy - 8 - lift);
 
-            text(ctx, tileName(tab), x + 45, yy + 10, 0xFFFFFFFF);
+            String title = CATS[idx].title();
+            textCentered(ctx, title, ccx, ccy + CAT_R + 7, mix(0xFFBBBBC6, 0xFFFFFFFF, k));
+            if (anyActive()) fillCircle(ctx, ccx + CAT_R - 5, ccy - CAT_R + 5 - lift, 4, 0xFF34D399);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            openCat = openCat == idx ? -1 : idx;
+        }
+    }
+
+    /** Symbol, das um einen geoeffneten Kategorie-Kreis herum aufklappt. */
+    private class RingIcon extends Control {
+        final int cat, slot;
+        final Tab tab;
+        int icx, icy;
+
+        RingIcon(int cat, int slot, Tab tab) {
+            this.cat = cat; this.slot = slot; this.tab = tab;
+            this.w = ICON; this.h = ICON;
+            layout();
+        }
+
+        private void layout() {
+            int n = CATS[cat].tabs().length;
+            float a = catAmt[cat];
+            float e = easeOutBack(a);
+            double ang = -Math.PI / 2 + 2 * Math.PI * slot / n;
+            icx = catCx(cat) + (int) Math.round(Math.cos(ang) * RING_R * e);
+            icy = catCy() + (int) Math.round(Math.sin(ang) * RING_R * e);
+            x = icx - ICON / 2;
+            y = icy - ICON / 2;
+        }
+
+        @Override
+        boolean contains(int mx, int my) {
+            return catAmt[cat] > 0.7f && super.contains(mx, my);
+        }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            float a = catAmt[cat];
+            if (a < 0.02f) return;
+            layout();
+            animateHover(mx, my, a > 0.7f);
+            float fa = clamp01(a * 1.6f);
+            int acc = Theme.accent();
+            int lift = Math.round(hover * 2f);
+            int yy = y - lift;
+
+            ctx.fill(x - 1, yy - 1, x + w + 1, yy + h + 1, alpha(acc, fa * (0.10f + 0.25f * hover)));
+            ctx.fill(x, yy, x + w, yy + h, alpha(mix(0xFF262631, 0xFF000000 | (acc & 0xFFFFFF), 0.12f + 0.50f * hover), fa));
+            outline(ctx, x, yy, w, h, alpha(acc, fa * (0.40f + 0.60f * hover)));
+            if (fa > 0.5f) ctx.drawItem(new ItemStack(tileItem(tab)), x + 7, yy + 7);
+
             String st = tileStatus(tab);
-            if (st != null) {
-                boolean good = !st.equals("AUS");
-                int cw0 = textRenderer.getWidth(st) + 8;
-                ctx.fill(x + 45, yy + 23, x + 45 + cw0, yy + 35, good ? alpha(0x34D399, 0.30f) : alpha(0xFFFFFF, 0.08f));
-                text(ctx, st, x + 49, yy + 25, good ? 0xFF66DD99 : 0xFF8A8A96);
-            } else {
-                text(ctx, tileSub(tab), x + 45, yy + 24, 0xFF8A8A96);
+            if (st != null && !st.equals("AUS") && fa > 0.5f) ctx.fill(x + w - 7, yy + 2, x + w - 2, yy + 7, 0xFF34D399);
+
+            if (hover > 0.45f && a > 0.9f) {
+                tipText = tileName(tab) + (st != null ? "  ·  " + st : "");
+                tipX = icx;
+                tipY = y + h + 5;
             }
         }
 
@@ -668,6 +747,7 @@ public class MenuScreen extends Screen {
             case SELL -> buildSell();
             case REPAIR -> buildRepair();
             case AFK -> buildAfk();
+            case CRYSTAL -> buildCrystal();
             case PROGRESS -> buildProgress();
             case CALC -> buildCalc();
             case FREECAM -> buildFreecam();
@@ -684,26 +764,50 @@ public class MenuScreen extends Screen {
 
     // ---- Startseite
 
-    private record Group(String title, int row, int side, Tab[] tabs) {}
+    private record Cat(String title, Item icon, Tab[] tabs) {}
 
-    private static final Group[] GROUPS = {
-            new Group("Verkauf", 0, 0, new Tab[]{Tab.AUCTION, Tab.SELL}),
-            new Group("Litematica", 0, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
-            new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
-            new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.MINIMI}),
-            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
+    private static final Cat[] CATS = {
+            new Cat("Verkauf", Items.GOLD_BLOCK, new Tab[]{Tab.AUCTION, Tab.SELL}),
+            new Cat("Litematica", Items.BRICKS, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
+            new Cat("Automatik", Items.REDSTONE, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
+            new Cat("Kosmetik", Items.NAME_TAG, new Tab[]{Tab.CAPES, Tab.MINIMI}),
+            new Cat("Extras", Items.NETHER_STAR, new Tab[]{Tab.CALC, Tab.AFK, Tab.CRYSTAL}),
     };
-    private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
+    private static final int CAT_R = 26, RING_R = 62, ICON = 30;
 
-    private int groupX(Group g) {
-        if (g.side() != 1) return left + 14;
-        int w0 = 0;
-        for (Group o : GROUPS) {
-            if (o.row() == g.row() && o.side() != 1) w0 = o.tabs().length * TILE_W + (o.tabs().length - 1) * TILE_GAP;
-        }
-        return left + 14 + w0 + 12;
+    private int catCx(int i) { return left + Math.round(W * (i + 0.5f) / CATS.length); }
+    private int catCy() { return top + 146; }
+
+    private static float easeOutBack(float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        float c1 = 1.70158f, c3 = c1 + 1f;
+        float u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
     }
-    private int groupY(Group g) { return top + 48 + g.row() * 68; }
+
+    private static void fillCircle(DrawContext ctx, int cxp, int cyp, int r, int color) {
+        for (int dy = -r; dy <= r; dy++) {
+            int hw = (int) Math.round(Math.sqrt((double) r * r - (double) dy * dy));
+            if (hw <= 0) continue;
+            ctx.fill(cxp - hw, cyp + dy, cxp + hw, cyp + dy + 1, color);
+        }
+    }
+
+    private static void ringCircle(DrawContext ctx, int cxp, int cyp, int R, int color) {
+        int r = R - 1;
+        for (int dy = -R; dy <= R; dy++) {
+            int wo = (int) Math.round(Math.sqrt((double) R * R - (double) dy * dy));
+            if (wo <= 0) continue;
+            if (Math.abs(dy) >= r) {
+                ctx.fill(cxp - wo, cyp + dy, cxp + wo, cyp + dy + 1, color);
+            } else {
+                int wi = (int) Math.round(Math.sqrt((double) r * r - (double) dy * dy));
+                if (wi >= wo) wi = wo - 1;
+                ctx.fill(cxp - wo, cyp + dy, cxp - wi, cyp + dy + 1, color);
+                ctx.fill(cxp + wi, cyp + dy, cxp + wo, cyp + dy + 1, color);
+            }
+        }
+    }
 
     private static Item tileItem(Tab t) {
         return switch (t) {
@@ -711,6 +815,7 @@ public class MenuScreen extends Screen {
             case SELL -> Items.EMERALD;
             case REPAIR -> Items.DIAMOND_PICKAXE;
             case AFK -> Items.RED_BED;
+            case CRYSTAL -> Items.END_CRYSTAL;
             case FREECAM -> Items.ENDER_EYE;
             case HT1 -> Items.IRON_SWORD;
             case SPAWNER -> Items.SPAWNER;
@@ -760,6 +865,7 @@ public class MenuScreen extends Screen {
             case SELL -> SellMacro.running() ? "LÄUFT" : c.cellAuto ? "AUTO" : "AUS";
             case REPAIR -> AutoRepair.running() ? "LÄUFT" : c.repairEnabled ? "AN" : "AUS";
             case AFK -> AfkGuard.active() ? "AN" : "AUS";
+            case CRYSTAL -> c.crystalLimit ? "AN" : "AUS";
             case MINIMI -> c.minimiEnabled ? "AN" : "AUS";
             case FREECAM -> Freecam.active() ? "AN" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
@@ -775,11 +881,22 @@ public class MenuScreen extends Screen {
     }
 
     private void buildHome() {
-        for (Group g : GROUPS) {
-            for (int i = 0; i < g.tabs().length; i++) {
-                controls.add(new Tile(groupX(g) + i * (TILE_W + TILE_GAP), groupY(g) + 14, TILE_W, TILE_H, g.tabs()[i]));
-            }
+        // Zuerst die Kreise, danach die Symbole (werden beim Klick zuerst geprueft)
+        for (int i = 0; i < CATS.length; i++) controls.add(new CatCircle(i));
+        for (int i = 0; i < CATS.length; i++) {
+            Tab[] tabs = CATS[i].tabs();
+            for (int j = 0; j < tabs.length; j++) controls.add(new RingIcon(i, j, tabs[j]));
         }
+    }
+
+    // ---- Crystal-Limit
+
+    private void buildCrystal() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 26, COL - 12, "Crystal-Limit aktiv",
+                () -> cfg.crystalLimit, v -> { cfg.crystalLimit = v; ModConfig.save(); }));
+        controls.add(new Sld(cx + 12, cy + 62, COL - 24, "Zeitfenster", " s", 1, 5,
+                () -> Math.max(1, Math.min(5, cfg.crystalLimitSec)), v -> cfg.crystalLimitSec = v));
     }
 
     // ---- Freecam
@@ -1178,8 +1295,6 @@ public class MenuScreen extends Screen {
                 () -> cfg.combatLockNeedsPlayer, v -> { cfg.combatLockNeedsPlayer = v; ModConfig.save(); }));
         controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Verzögerung", " s", 0, 19,
                 () -> Math.max(0, Math.min(19, cfg.combatLockDelaySec)), v -> cfg.combatLockDelaySec = v));
-        controls.add(new Tog(cx + COL2 + 6, cy + 126, COL - 12, "Axt gegen Schild",
-                () -> cfg.shieldAxe, v -> { cfg.shieldAxe = v; ModConfig.save(); }));
     }
 
     private void buildSpawner() {
@@ -1607,6 +1722,17 @@ public class MenuScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        // Kategorie-Animation (zeitbasiert, unabhaengig von der Bildrate)
+        float nowT = time();
+        float dt = Math.max(0f, Math.min(0.1f, nowT - lastFrameT));
+        lastFrameT = nowT;
+        boolean anim = ModConfig.get().menuAnimations;
+        for (int i = 0; i < catAmt.length; i++) {
+            float target = i == openCat ? 1f : 0f;
+            if (!anim) catAmt[i] = target;
+            else if (target > catAmt[i]) catAmt[i] = Math.min(target, catAmt[i] + dt / 0.32f);
+            else catAmt[i] = Math.max(target, catAmt[i] - dt / 0.22f);
+        }
         if (activeTab == Tab.PROGRESS && SchematicProgress.version() != progSeen) {
             progSeen = SchematicProgress.version();
             clearAndInit();
@@ -1634,6 +1760,7 @@ public class MenuScreen extends Screen {
         super.render(ctx, mouseX, mouseY, delta); // Hintergrund + Textfeld
 
         hoverCape = null;
+        tipText = null;
         renderBackdrop(ctx);
         List<Control> snapshot = new ArrayList<>(controls);
         for (TextFieldWidget f : fields) f.render(ctx, mouseX, mouseY, delta); // ueber den Karten
@@ -1694,7 +1821,17 @@ public class MenuScreen extends Screen {
                 card(ctx, cx, cy + 16, LIST_W, 174, "Blöcke (Klick = ausschließen)");
                 card(ctx, cx + LIST_W + 10, cy + 16, cw - LIST_W - 10, 174, "Einstellungen");
             }
-            case HOME -> { }
+            case HOME -> {
+                int acc = Theme.accent();
+                for (int i = 0; i < CATS.length; i++) {
+                    float a = catAmt[i];
+                    if (a > 0.02f) ringCircle(ctx, catCx(i), catCy(), Math.max(2, Math.round(RING_R * easeOutBack(a))), alpha(acc, 0.20f * clamp01(a * 1.5f)));
+                }
+            }
+            case CRYSTAL -> {
+                card(ctx, cx, cy - 4, COL, 150, "Crystal-Limit");
+                card(ctx, cx + COL2, cy - 4, COL, 150, "So funktioniert es");
+            }
             case CAPES -> {
                 int rx = cx + LIST_W + 10, rw = cx + cw - rx;
                 card(ctx, rx, cy, rw, 126, null);
@@ -1742,6 +1879,7 @@ public class MenuScreen extends Screen {
             case RECORDER -> renderRecorder(ctx);
             case SELL -> renderSell(ctx);
             case AFK -> renderAfk(ctx);
+            case CRYSTAL -> renderCrystal(ctx);
             case MINIMI -> renderMinimi(ctx);
             case REPAIR -> renderRepair(ctx);
             case PROGRESS -> renderProgress(ctx);
@@ -1752,23 +1890,40 @@ public class MenuScreen extends Screen {
 
     private void renderHome(DrawContext ctx) {
         int acc = Theme.accent();
-        for (Group g : GROUPS) {
-            int gx = groupX(g), gy = groupY(g);
-            int gw = g.tabs().length * TILE_W + (g.tabs().length - 1) * TILE_GAP;
-            String l = g.title().toUpperCase(java.util.Locale.ROOT);
-            text(ctx, l, gx + 2, gy + 2, alpha(acc, 0.9f));
-            int lx = gx + 8 + textRenderer.getWidth(l);
-            ctx.fill(lx, gy + 6, gx + gw, gy + 7, alpha(0xFFFFFF, 0.12f));
-        }
         ModConfig c = ModConfig.get();
+        if (openCat < 0 && catAmt[0] + catAmt[1] + catAmt[2] + catAmt[3] + catAmt[4] < 0.05f) {
+            textCentered(ctx, "Kategorie anklicken – die Funktionen klappen rundherum auf",
+                    left + W / 2, top + 52, alpha(0xFFFFFF, 0.45f));
+        }
         List<String> on = new ArrayList<>();
         if (c.autoPlace) on.add("Auto-Platzieren");
         if (c.combatLock) on.add("Combat Lock");
         if (c.spawnerGuard) on.add("Spawner-Schutz");
+        if (c.crystalLimit) on.add("Crystal-Limit");
         if (AuctionMacro.running()) on.add("Auktions-Makro");
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");
-        text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
+        text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + shorten(String.join(", ", on), 60),
                 left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);
+
+        if (tipText != null) {
+            int tw = textRenderer.getWidth(tipText) + 12;
+            int tx = Math.max(left + 4, Math.min(left + W - 4 - tw, tipX - tw / 2));
+            ctx.fill(tx, tipY, tx + tw, tipY + 15, 0xF0121218);
+            outline(ctx, tx, tipY, tw, 15, alpha(acc, 0.7f));
+            text(ctx, tipText, tx + 6, tipY + 4, 0xFFFFFFFF);
+        }
+    }
+
+    private void renderCrystal(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        int rx = cx + COL2 + 12;
+        drawWrapped(ctx, "Auf einem einzelnen Obsidian werden höchstens 2 Crystals pro Zeitfenster platziert.",
+                rx, cy + 26, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "Platzieren, Pop, platzieren, Pop – der dritte Rechtsklick wird verworfen, bis die Zeit für das älteste Crystal abgelaufen ist.",
+                rx, cy + 62, COL - 24, 0xFFCCCCCC);
+        drawWrapped(ctx, "Gilt für jeden Obsidian einzeln.", rx, cy + 118, COL - 24, 0xFF777783);
+        text(ctx, cfg.crystalLimit ? "Aktiv: max. 2 pro " + cfg.crystalLimitSec + " s" : "Aus",
+                cx + 12, cy + 100, cfg.crystalLimit ? 0xFF66DD99 : 0xFF999999);
     }
 
     private void renderMinimi(DrawContext ctx) {

@@ -4,7 +4,8 @@
   "package": "de.mapartassist.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "AbstractClientPlayerEntityMixin"
+    "AbstractClientPlayerEntityMixin",
+    "ClientPlayerInteractionManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
