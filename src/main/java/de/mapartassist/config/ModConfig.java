@@ -103,6 +103,8 @@ public class ModConfig {
     public boolean combatLockNeedsPlayer = true;
     /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */
     public int combatLockDelaySec = 0;
+    /** Schild-Brecher: mit der Axt Schilde von Gegnern brechen. */
+    public boolean shieldAxe = false;
     /** Crystal-Limit: auf einem Obsidian maximal 2 Crystals pro Zeitfenster (1-5 Sekunden). */
     public boolean crystalLimit = false;
     public int crystalLimitSec = 3;
