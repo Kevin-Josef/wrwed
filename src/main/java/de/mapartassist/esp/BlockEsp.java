@@ -12,12 +12,15 @@ import net.minecraft.registry.Registries;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.WorldChunk;
 
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Block-ESP: zeigt ausgewaehlte Bloecke als Umrisse durch Waende.
@@ -41,7 +44,7 @@ public final class BlockEsp {
         }
     }
 
-    private static final int BUDGET = 30_000;   // geprueft pro Tick
+    private static final int BUDGET = 40_000;   // Rechenbudget pro Tick (leerer Abschnitt ~1-3, voller Scan 4096)
     private static final int HARD_CAP = 4_000;  // maximal gemerkte Treffer
     private static final double NEAR = 0.05;
 
@@ -52,7 +55,11 @@ public final class BlockEsp {
     private static List<Hit> building = null;
     private static boolean scanning = false;
     private static int cooldown = 0;
-    private static int sOx, sOy, sOz, sR, sMinY, sMaxY, curX, curY, curZ;
+    private static int sOx, sOy, sOz, sR, sMinY, sMaxY;
+    private static int minCx, maxCx, minCz, maxCz, curCx, curCz, curSec;
+    private static WorldChunk curChunk = null;
+    /** Schneller Vorab-Test pro Chunk-Abschnitt (prueft nur die Palette, nicht jeden Block). */
+    private static final Predicate<BlockState> IS_SELECTED = st -> selected.contains(st.getBlock());
     private static int scanRange = -1;
     private static ClientWorld lastWorld = null;
 
@@ -200,36 +207,66 @@ public final class BlockEsp {
             if (cooldown > 0) { cooldown--; return; }
             BlockPos pp = mc.player.getBlockPos();
             sOx = pp.getX(); sOy = pp.getY(); sOz = pp.getZ();
-            sR = Math.max(8, Math.min(64, cfg.espRange));
+            sR = Math.max(8, Math.min(128, cfg.espRange));
             int bottom = world.getBottomY();
             int top = bottom + world.getHeight() - 1;
             sMinY = Math.max(bottom, sOy - sR);
             sMaxY = Math.min(top, sOy + sR);
-            curX = sOx - sR; curZ = sOz - sR; curY = sMinY;
+            minCx = (sOx - sR) >> 4; maxCx = (sOx + sR) >> 4;
+            minCz = (sOz - sR) >> 4; maxCz = (sOz + sR) >> 4;
+            curCx = minCx; curCz = minCz; curSec = 0; curChunk = null;
             building = new ArrayList<>();
             scanning = true;
         }
 
         int budget = BUDGET;
-        while (budget-- > 0) {
-            MPOS.set(curX, curY, curZ);
-            BlockState st = world.getBlockState(MPOS);
-            if (!st.isAir()) {
-                Block b = st.getBlock();
-                if (selected.contains(b)) {
-                    int dx = curX - sOx, dy = curY - sOy, dz = curZ - sOz;
-                    building.add(new Hit(curX, curY, curZ, b, colorFor(b), dx * dx + dy * dy + dz * dz));
+        int maxD2 = (sR + 2) * (sR + 2);
+        while (budget > 0) {
+            if (curChunk == null) {
+                curChunk = world.getChunkManager().getWorldChunk(curCx, curCz);
+                curSec = 0;
+                budget -= 8;
+            }
+            if (curChunk != null) {
+                ChunkSection[] secs = curChunk.getSectionArray();
+                if (curSec < secs.length) {
+                    ChunkSection sec = secs[curSec];
+                    int baseY = (curChunk.getBottomSectionCoord() + curSec) << 4;
+                    curSec++;
+                    if (sec == null || sec.isEmpty() || baseY + 15 < sMinY || baseY > sMaxY) { budget -= 1; continue; }
+                    if (!sec.hasAny(IS_SELECTED)) { budget -= 3; continue; }
+                    budget -= 4096;
+                    scanSection(sec, curCx << 4, baseY, curCz << 4, maxD2);
+                    continue;
                 }
             }
-            // naechste Position: y innen, dann z, dann x
-            if (++curY > sMaxY) {
-                curY = sMinY;
-                if (++curZ > sOz + sR) {
-                    curZ = sOz - sR;
-                    if (++curX > sOx + sR) {
-                        finishScan();
-                        break;
-                    }
+            // naechste Chunk-Spalte
+            curChunk = null;
+            if (++curCz > maxCz) {
+                curCz = minCz;
+                if (++curCx > maxCx) {
+                    finishScan();
+                    break;
+                }
+            }
+        }
+    }
+
+    private static void scanSection(ChunkSection sec, int baseX, int baseY, int baseZ, int maxD2) {
+        for (int ly = 0; ly < 16; ly++) {
+            int y = baseY + ly;
+            if (y < sMinY || y > sMaxY) continue;
+            for (int lz = 0; lz < 16; lz++) {
+                for (int lx = 0; lx < 16; lx++) {
+                    BlockState st = sec.getBlockState(lx, ly, lz);
+                    if (st.isAir()) continue;
+                    Block b = st.getBlock();
+                    if (!selected.contains(b)) continue;
+                    int x = baseX + lx, z = baseZ + lz;
+                    int dx = x - sOx, dy = y - sOy, dz = z - sOz;
+                    int d2 = dx * dx + dy * dy + dz * dz;
+                    if (d2 > maxD2) continue;
+                    building.add(new Hit(x, y, z, b, colorFor(b), d2));
                 }
             }
         }

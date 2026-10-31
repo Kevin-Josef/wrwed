@@ -1255,8 +1255,8 @@ public class MenuScreen extends Screen {
                 () -> cfg.espEnabled, v -> { cfg.espEnabled = v; ModConfig.save(); BlockEsp.invalidate(); }));
         controls.add(new Tog(rx - 6, cy + 46, rw + 12, "Tracer zur Bildmitte",
                 () -> cfg.espTracers, v -> { cfg.espTracers = v; ModConfig.save(); }));
-        controls.add(new Sld(rx, cy + 76, rw, "Reichweite", " Blöcke", 8, 64,
-                () -> Math.max(8, Math.min(64, cfg.espRange)), v -> cfg.espRange = v));
+        controls.add(new Sld(rx, cy + 76, rw, "Reichweite", " Blöcke", 8, 128,
+                () -> Math.max(8, Math.min(128, cfg.espRange)), v -> cfg.espRange = v));
         controls.add(new Sld(rx, cy + 106, rw, "Max. angezeigt", "", 10, 500,
                 () -> Math.max(10, Math.min(500, cfg.espMaxBlocks)), v -> cfg.espMaxBlocks = v));
 
