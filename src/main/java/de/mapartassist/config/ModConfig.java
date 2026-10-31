@@ -62,6 +62,16 @@ public class ModConfig {
     public int repairStacks = 2;
     public boolean repairResume = true;
     public String repairCategory = "Ausrüstung";
+    /** Block-ESP: Umrisse ausgewaehlter Bloecke durch Waende. */
+    public boolean espEnabled = false;
+    /** Registry-IDs der Bloecke, die angezeigt werden (z. B. minecraft:diamond_ore). */
+    public List<String> espBlocks = new ArrayList<>();
+    /** Suchradius in Bloecken (8-64). */
+    public int espRange = 32;
+    /** Maximal gleichzeitig gezeichnete Bloecke. */
+    public int espMaxBlocks = 200;
+    /** Linie von der Bildmitte zu jedem Block. */
+    public boolean espTracers = false;
     /** Freecam-Geschwindigkeit in Bloecken pro Sekunde. */
     public int freecamSpeed = 8;
     /** Bewegungs-Recorder: endlos wiederholen / Anzahl Wiederholungen / Blickrichtung relativ zum Start. */
@@ -99,15 +109,12 @@ public class ModConfig {
     public boolean macroRepeat = true;
     /** HT1 Combat Lock: bei Schaden sofort den Server verlassen. */
     public boolean combatLock = false;
+    /** Axt gegen Schild: bei blockendem Gegner im Fadenkreuz automatisch auf die Axt wechseln. */
+    public boolean shieldAxe = false;
     /** Nur ausloesen, wenn ein anderer Spieler in der Naehe ist (ignoriert Fall-/Feuer-/Hungerschaden). */
     public boolean combatLockNeedsPlayer = true;
     /** Sekunden zwischen Treffer und Verlassen (0 = sofort, max. 19). */
     public int combatLockDelaySec = 0;
-    /** Schild-Brecher: mit der Axt Schilde von Gegnern brechen. */
-    public boolean shieldAxe = false;
-    /** Crystal-Limit: auf einem Obsidian maximal 2 Crystals pro Zeitfenster (1-5 Sekunden). */
-    public boolean crystalLimit = false;
-    public int crystalLimitSec = 3;
     /** Spawner-AFK-Schutz: bei fremdem Spieler im Radius Spawner abbauen und Server verlassen. */
     public boolean spawnerGuard = false;
     /** Radius in Bloecken, ab dem ein anderer Spieler den Schutz ausloest. */
@@ -176,6 +183,9 @@ public class ModConfig {
                 loaded.cellInterval = Math.max(5, Math.min(300, loaded.cellInterval));
                 loaded.repairThreshold = Math.max(1, Math.min(500, loaded.repairThreshold));
                 loaded.repairStacks = Math.max(1, Math.min(4, loaded.repairStacks));
+                if (loaded.espBlocks == null) loaded.espBlocks = new ArrayList<>();
+                loaded.espRange = Math.max(8, Math.min(64, loaded.espRange <= 0 ? 32 : loaded.espRange));
+                loaded.espMaxBlocks = Math.max(10, Math.min(500, loaded.espMaxBlocks <= 0 ? 200 : loaded.espMaxBlocks));
                 if (loaded.progressExcluded == null) loaded.progressExcluded = new ArrayList<>();
                 if (loaded.selectedRecording == null) loaded.selectedRecording = "";
                 loaded.freecamSpeed = Math.max(1, Math.min(40, loaded.freecamSpeed));
@@ -184,7 +194,6 @@ public class ModConfig {
                 loaded.bgStyle = Math.max(0, Math.min(7, loaded.bgStyle));
                 loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
                 loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
-                loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 3 : loaded.crystalLimitSec));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
                 INSTANCE = loaded;
                 save();

@@ -2,6 +2,8 @@ package de.mapartassist;
 
 import de.mapartassist.cam.Freecam;
 import de.mapartassist.combat.CombatLock;
+import de.mapartassist.combat.ShieldBreaker;
+import de.mapartassist.esp.BlockEsp;
 import de.mapartassist.litematica.SchematicProgress;
 import de.mapartassist.macro.AfkGuard;
 import de.mapartassist.mini.Minimi;
@@ -58,6 +60,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     public static KeyBinding guiKey;
     public static KeyBinding spawnerKey;
     public static KeyBinding freecamKey;
+    public static KeyBinding espKey;
     public static KeyBinding recordKey;
     public static KeyBinding playKey;
     private static final KeyBinding.Category CATEGORY =
@@ -99,6 +102,8 @@ public class MapArtAssistClient implements ClientModInitializer {
                 "key.mapartassist.spawner", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_L, CATEGORY));
         freecamKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.freecam", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F7, CATEGORY));
+        espKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.esp", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_H, CATEGORY));
         recordKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.record", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_1, CATEGORY));
         playKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -121,6 +126,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(AutoRepair::tick);
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
         ClientTickEvents.END_CLIENT_TICK.register(SpawnerGuard::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(BlockEsp::tick);
         // /sellmacro = /sell-Makro, /repairmacro = Auto-Reparatur (Test). Die Server-Befehle /sell und /shop bleiben frei.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(ClientCommandManager.literal("sellmacro")
@@ -182,6 +188,7 @@ public class MapArtAssistClient implements ClientModInitializer {
                     onFrame(MinecraftClient.getInstance());
                     CombatLock.check(MinecraftClient.getInstance());
                     Freecam.update(MinecraftClient.getInstance());
+                    ShieldBreaker.frame(MinecraftClient.getInstance());
                 });
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "progress_hud"),
@@ -191,6 +198,10 @@ public class MapArtAssistClient implements ClientModInitializer {
                     String t = SchematicProgress.hudText();
                     if (t != null) ctx.drawTextWithShadow(mc.textRenderer, t, 6, 6, 0xFFFFFFFF);
                 });
+        // Block-ESP: Umrisse ausgewaehlter Bloecke (Projektion aufs HUD)
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+                Identifier.of("mapartassist", "block_esp"),
+                (ctx, tickCounter) -> BlockEsp.render(ctx, MinecraftClient.getInstance()));
     }
 
     // ------------------------------------------------------------------ Auto-Schleichen
@@ -313,6 +324,15 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (messageCooldown > 0) messageCooldown--;
 
         while (freecamKey.wasPressed()) Freecam.toggle(client);
+        while (espKey.wasPressed()) {
+            cfg.espEnabled = !cfg.espEnabled;
+            ModConfig.save();
+            BlockEsp.invalidate();
+            if (client.player != null) {
+                client.player.sendMessage(Text.literal("Block-ESP: " + (cfg.espEnabled ? "AN" : "AUS"))
+                        .formatted(cfg.espEnabled ? Formatting.GREEN : Formatting.RED), true);
+            }
+        }
         while (recordKey.wasPressed()) MovementRecorder.toggleRecord(client);
         while (playKey.wasPressed()) MovementRecorder.togglePlay(client);
         while (guiKey.wasPressed()) client.setScreen(new MenuScreen(null));

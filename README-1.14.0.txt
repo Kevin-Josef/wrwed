@@ -129,3 +129,32 @@ dass du schon in der Area stehst, und hoert auf. Knopf "Jetzt /afk senden", fall
 Auktions-Makro Seiten-Blaettern: Nach einem Seitenwechsel wartet die Mod laenger (Server verschluckt sonst schnelle Klicks)
 und klickt "Naechste Seite" bis zu 3x erneut, wenn sich der Inhalt nicht aendert, bevor sie von "letzter Seite" ausgeht.
 Bricht die Suche nach mehreren Seiten ab, steht der Menue-Inhalt in config/mapartassist/ah-dump.txt.
+
+==== 1.20.0 ====
+Axt gegen Schild (Automatik > HT1 Combat Lock > "Axt gegen Schild"): Haelt der Spieler im Fadenkreuz sein Schild hoch,
+wechselt die Mod pro Frame sofort auf eine Axt aus der Hotbar. Laesst er das Schild runter (oder schaut er weg), geht es nach
+0,15 s zurueck auf das vorherige Item. Wechselst du selbst, wird nichts zurueckgesetzt.
+
+==== 1.20.1 ====
+Axt gegen Schild: Die Mod wechselt jetzt nicht nur auf die Axt, sie schlaegt auch selbst zu (ein Schlag, deaktiviert das Schild)
+und wechselt im selben Frame wieder auf das vorherige Item zurueck. Mindestabstand 0,35 s zwischen automatischen Schlaegen.
+
+==== 1.21.0 ====
+BLOCK-ESP (Menü: Würfel-Symbol oben rechts neben Freecam, oder Taste H zum Ein-/Ausschalten)
+- Zeigt ausgewählte Blöcke als Umriss durch Wände, wie die Block-ESP in Meteor.
+- Links die Blockliste: Suchfeld, Klick auf einen Block = an/aus. "Nur Auswahl" zeigt nur die gewählten.
+  Rechts: Reichweite (8-64), Max. angezeigt, Tracer (Linie von der Bildmitte zum Block).
+  Knöpfe: "Alle Erze", "Kisten/Spawner", "Block aus Hand", "Alle abwählen".
+- Jeder Block hat seine Farbe (Diamant türkis, Gold gelb, Smaragd grün, ...). Unbekannte Blöcke bekommen eine feste Farbe aus dem Namen.
+- Weit entfernte Blöcke werden als kleiner Punkt gezeichnet. Abgebaute Blöcke verschwinden sofort.
+- Der Scan läuft in kleinen Happen über mehrere Ticks, das Spiel ruckelt dadurch nicht.
+
+TECHNIK / GRENZEN
+- Gezeichnet wird als 2D-Projektion über das HUD (keine eigene Render-Pipeline, keine Mixins). Das ist robust gegen
+  Änderungen im Minecraft-Rendering, hat aber Grenzen:
+  * Nur in der Ego-Ansicht (F5 = aus).
+  * "Ansicht wackeln" (Video-Einstellungen) am besten ausschalten, sonst verrutschen die Linien beim Laufen minimal.
+  * Beim Sprinten wird der FOV-Effekt nachgerechnet (Standard "FOV-Effekte 100 %"). Mit Geschwindigkeits-Trank
+    oder anderen FOV-Werten kann es leicht verrutschen.
+- Nicht gebaut/getestet (kein Gradle hier). Bitte bauen und Fehlermeldungen schicken.
+- Prüfe die Regeln deines Servers: Block-ESP/X-Ray ist auf vielen Servern verboten.

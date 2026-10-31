@@ -5,6 +5,7 @@ import de.mapartassist.combat.CombatLock;
 import de.mapartassist.cape.CapeManager;
 import de.mapartassist.cape.CapePreview;
 import de.mapartassist.cam.Freecam;
+import de.mapartassist.esp.BlockEsp;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.litematica.SchematicProgress;
 import de.mapartassist.macro.AfkGuard;
@@ -14,6 +15,7 @@ import de.mapartassist.macro.SellMacro;
 import de.mapartassist.mini.Minimi;
 import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.macro.AuctionMacro;
+import net.minecraft.block.Block;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.input.CharInput;
 import net.minecraft.client.input.KeyInput;
@@ -56,7 +58,6 @@ public class MenuScreen extends Screen {
         RECORDER("Makros", "Bewegungs-Recorder"),
         REPAIR("Makros", "Auto-Reparatur"),
         AFK("Makros", "AFK-Wächter"),
-        CRYSTAL("Extras", "Crystal-Limit"),
         CAPES("Kosmetik", "Capes"),
         CREATOR("Kosmetik", "Cape Creator"),
         MINIMI("Kosmetik", "Minimi"),
@@ -64,7 +65,8 @@ public class MenuScreen extends Screen {
         MAPART("Litematica", "Map Art"),
         PROGRESS("Litematica", "Fortschritt"),
         SETTINGS(null, "Design"),
-        FREECAM("Extras", "Freecam");
+        FREECAM("Extras", "Freecam"),
+        ESP("Extras", "Block-ESP");
 
         final String group, label;
         Tab(String group, String label) { this.group = group; this.label = label; }
@@ -87,6 +89,16 @@ public class MenuScreen extends Screen {
     private static int miniScroll = 0;
     private static String cellStatus = "";
     private static int progScroll = 0;
+    // Block-ESP: Suche, Liste und Scroll bleiben beim erneuten Oeffnen erhalten
+    private static String espSearch = "";
+    private static boolean espOnlySelected = false;
+    private static int espScroll = 0;
+    private static String espStatus = "";
+    private static List<Block> espAll = null;
+    private static List<Block> espFiltered = new ArrayList<>();
+    private static String espLastSearch = null;
+    private static boolean espLastOnly = false;
+    private static int espLastSel = 0;
     private int progSeen = -1;
     private static String macroStatus = "";
     private static CapeCreator.Fit creatorFit = CapeCreator.Fit.CROP;
@@ -102,13 +114,6 @@ public class MenuScreen extends Screen {
     private float tabChangeAt = -10f;
     private String hoverCape = null;
 
-    // Startseite: Kategorie-Kreise mit aufklappenden Symbolen
-    private static int openCat = -1;
-    private static final float[] catAmt = new float[5];
-    private float lastFrameT = 0f;
-    private String tipText = null;
-    private int tipX, tipY;
-
     // Farbwaehler
     private float hue, sat, val;
     private TextFieldWidget hexField, cmdField, titleField;
@@ -119,8 +124,6 @@ public class MenuScreen extends Screen {
         super(Text.literal("Mod-Menü"));
         this.parent = parent;
         activeTab = Tab.HOME; // Menue startet immer auf der Startseite
-        openCat = -1;
-        java.util.Arrays.fill(catAmt, 0f);
         CapeManager.scan();
         CapePreview.clear();
     }
@@ -210,106 +213,37 @@ public class MenuScreen extends Screen {
         }
     }
 
-    /** Kategorie-Kreis auf der Startseite. Klick klappt die Symbole rundherum auf. */
-    private class CatCircle extends Control {
-        final int idx;
+    /** Kachel auf der Startseite (kompakt, ein Bereich pro Gruppe). */
+    private class Tile extends Control {
+        final Tab tab;
 
-        CatCircle(int idx) {
-            this.idx = idx;
-            int r = CAT_R;
-            this.x = catCx(idx) - r; this.y = catCy() - r; this.w = r * 2; this.h = r * 2;
-        }
-
-        @Override
-        boolean contains(int mx, int my) {
-            int dx = mx - catCx(idx), dy = my - catCy();
-            return dx * dx + dy * dy <= CAT_R * CAT_R;
-        }
-
-        private boolean anyActive() {
-            for (Tab t : CATS[idx].tabs()) {
-                String st = tileStatus(t);
-                if (st != null && !st.equals("AUS")) return true;
-            }
-            return false;
+        Tile(int x, int y, int w, int h, Tab tab) {
+            this.x = x; this.y = y; this.w = w; this.h = h; this.tab = tab;
         }
 
         @Override
         void draw(DrawContext ctx, int mx, int my) {
             animateHover(mx, my, true);
-            float a = catAmt[idx];
-            float k = Math.max(hover * 0.8f, a);
             int acc = Theme.accent();
-            int ccx = catCx(idx), ccy = catCy();
-            int lift = Math.round(hover * 2f);
+            int yy = y - Math.round(hover * 2);
+            ctx.fill(x, yy, x + w, yy + h, mix(0xFF262631, alpha(acc, 0.30f), hover * 0.85f));
+            outline(ctx, x, yy, w, h, alpha(acc, 0.18f + 0.55f * hover));
+            ctx.fill(x, yy, x + Math.round(w * (0.25f + 0.75f * hover)), yy + 2, acc);
 
-            if (k > 0.02f) fillCircle(ctx, ccx, ccy - lift, CAT_R + 5, alpha(acc, 0.08f + 0.16f * k));
-            fillCircle(ctx, ccx, ccy - lift, CAT_R + 1, alpha(acc, 0.35f + 0.65f * k));
-            fillCircle(ctx, ccx, ccy - lift, CAT_R, mix(0xFF262631, 0xFF000000 | (acc & 0xFFFFFF), 0.10f + 0.30f * k));
-            ctx.drawItem(new ItemStack(CATS[idx].icon()), ccx - 8, ccy - 8 - lift);
+            ctx.fill(x + 8, yy + 8, x + 38, yy + 38, alpha(acc, 0.16f + 0.14f * hover));
+            outline(ctx, x + 8, yy + 8, 30, 30, alpha(acc, 0.35f));
+            Item it = tileItem(tab);
+            ctx.drawItem(new ItemStack(it), x + 15, yy + 15);
 
-            String title = CATS[idx].title();
-            textCentered(ctx, title, ccx, ccy + CAT_R + 7, mix(0xFFBBBBC6, 0xFFFFFFFF, k));
-            if (anyActive()) fillCircle(ctx, ccx + CAT_R - 5, ccy - CAT_R + 5 - lift, 4, 0xFF34D399);
-        }
-
-        @Override
-        void press(int mx, int my) {
-            openCat = openCat == idx ? -1 : idx;
-        }
-    }
-
-    /** Symbol, das um einen geoeffneten Kategorie-Kreis herum aufklappt. */
-    private class RingIcon extends Control {
-        final int cat, slot;
-        final Tab tab;
-        int icx, icy;
-
-        RingIcon(int cat, int slot, Tab tab) {
-            this.cat = cat; this.slot = slot; this.tab = tab;
-            this.w = ICON; this.h = ICON;
-            layout();
-        }
-
-        private void layout() {
-            int n = CATS[cat].tabs().length;
-            float a = catAmt[cat];
-            float e = easeOutBack(a);
-            double ang = -Math.PI / 2 + 2 * Math.PI * slot / n;
-            icx = catCx(cat) + (int) Math.round(Math.cos(ang) * RING_R * e);
-            icy = catCy() + (int) Math.round(Math.sin(ang) * RING_R * e);
-            x = icx - ICON / 2;
-            y = icy - ICON / 2;
-        }
-
-        @Override
-        boolean contains(int mx, int my) {
-            return catAmt[cat] > 0.7f && super.contains(mx, my);
-        }
-
-        @Override
-        void draw(DrawContext ctx, int mx, int my) {
-            float a = catAmt[cat];
-            if (a < 0.02f) return;
-            layout();
-            animateHover(mx, my, a > 0.7f);
-            float fa = clamp01(a * 1.6f);
-            int acc = Theme.accent();
-            int lift = Math.round(hover * 2f);
-            int yy = y - lift;
-
-            ctx.fill(x - 1, yy - 1, x + w + 1, yy + h + 1, alpha(acc, fa * (0.10f + 0.25f * hover)));
-            ctx.fill(x, yy, x + w, yy + h, alpha(mix(0xFF262631, 0xFF000000 | (acc & 0xFFFFFF), 0.12f + 0.50f * hover), fa));
-            outline(ctx, x, yy, w, h, alpha(acc, fa * (0.40f + 0.60f * hover)));
-            if (fa > 0.5f) ctx.drawItem(new ItemStack(tileItem(tab)), x + 7, yy + 7);
-
+            text(ctx, tileName(tab), x + 45, yy + 10, 0xFFFFFFFF);
             String st = tileStatus(tab);
-            if (st != null && !st.equals("AUS") && fa > 0.5f) ctx.fill(x + w - 7, yy + 2, x + w - 2, yy + 7, 0xFF34D399);
-
-            if (hover > 0.45f && a > 0.9f) {
-                tipText = tileName(tab) + (st != null ? "  ·  " + st : "");
-                tipX = icx;
-                tipY = y + h + 5;
+            if (st != null) {
+                boolean good = !st.equals("AUS");
+                int cw0 = textRenderer.getWidth(st) + 8;
+                ctx.fill(x + 45, yy + 23, x + 45 + cw0, yy + 35, good ? alpha(0x34D399, 0.30f) : alpha(0xFFFFFF, 0.08f));
+                text(ctx, st, x + 49, yy + 25, good ? 0xFF66DD99 : 0xFF8A8A96);
+            } else {
+                text(ctx, tileSub(tab), x + 45, yy + 24, 0xFF8A8A96);
             }
         }
 
@@ -319,7 +253,7 @@ public class MenuScreen extends Screen {
 
     /** Kleiner Icon-Knopf oben rechts (Design). */
     private class IconBtn extends Control {
-        final int kind; // 0 = Design, 1 = Freecam
+        final int kind; // 0 = Design, 1 = Freecam, 2 = Block-ESP
         final String tip;
         final BooleanSupplier on;
         final Runnable run;
@@ -344,6 +278,10 @@ public class MenuScreen extends Screen {
                     ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
                     ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, sel ? 0xFFFFFFFF : acc);
                 }
+            } else if (kind == 2) {
+                // Wuerfel-Umriss (Block-ESP)
+                outline(ctx, x + 4, y + 4, 10, 10, lc);
+                ctx.fill(x + 7, y + 7, x + 11, y + 11, sel ? 0xFFFFFFFF : acc);
             } else {
                 // Auge (Freecam)
                 ctx.fill(x + 3, y + 6, x + w - 3, y + 7, lc);
@@ -656,6 +594,82 @@ public class MenuScreen extends Screen {
         void press(int mx, int my) { SchematicProgress.toggleExcluded(st.block); }
     }
 
+    /** Scrollbare Blockliste fuer das Block-ESP (Klick = an/aus). */
+    private class EspList extends Control {
+        static final int ROW = 22;
+
+        EspList(int x, int y, int w, int rows) {
+            this.x = x; this.y = y; this.w = w; this.h = rows * ROW;
+        }
+
+        int rows() { return h / ROW; }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            List<Block> list = espList();
+            int maxScroll = Math.max(0, list.size() - rows());
+            espScroll = Math.max(0, Math.min(espScroll, maxScroll));
+            int acc = Theme.accent();
+            for (int i = 0; i < rows(); i++) {
+                int idx = espScroll + i;
+                if (idx >= list.size()) break;
+                Block b = list.get(idx);
+                int ry = y + i * ROW;
+                boolean sel = BlockEsp.isSelected(b);
+                boolean hov = mx >= x && mx < x + w && my >= ry && my < ry + ROW - 2;
+                int bg = sel ? alpha(acc, hov ? 0.40f : 0.28f) : (hov ? 0xFF30303C : 0xFF262631);
+                ctx.fill(x, ry, x + w, ry + ROW - 2, bg);
+                Item it = b.asItem();
+                if (it != Items.AIR) ctx.drawItem(new ItemStack(it), x + 3, ry + 2);
+                text(ctx, shorten(b.getName().getString(), 22), x + 24, ry + 7, sel ? 0xFFFFFFFF : 0xFFC8C8D2);
+                int bx = x + w - 16;
+                outline(ctx, bx, ry + 5, 10, 10, sel ? 0xFFFFFFFF : 0xFF5A5A68);
+                if (sel) ctx.fill(bx + 2, ry + 7, bx + 8, ry + 13, BlockEsp.colorFor(b));
+            }
+            if (list.isEmpty()) text(ctx, "Keine Treffer.", x + 6, y + 6, 0xFF999999);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            List<Block> list = espList();
+            int i = (my - y) / ROW;
+            int idx = espScroll + i;
+            if (i < 0 || i >= rows() || idx >= list.size()) return;
+            BlockEsp.toggle(list.get(idx));
+        }
+    }
+
+    /** Alle Bloecke mit Item, nach Name sortiert; gefiltert nach Suche bzw. "nur gewaehlte". */
+    private static List<Block> espList() {
+        if (espAll == null) {
+            List<Block> all = new ArrayList<>();
+            for (Block b : Registries.BLOCK) {
+                if (b.asItem() != Items.AIR) all.add(b);
+            }
+            all.sort(java.util.Comparator.comparing(b -> b.getName().getString()));
+            espAll = all;
+        }
+        String q = espSearch.trim().toLowerCase(java.util.Locale.ROOT);
+        int selHash = ModConfig.get().espBlocks.hashCode();
+        if (!q.equals(espLastSearch) || espOnlySelected != espLastOnly || selHash != espLastSel) {
+            espLastSearch = q;
+            espLastOnly = espOnlySelected;
+            espLastSel = selHash;
+            List<Block> out = new ArrayList<>();
+            for (Block b : espAll) {
+                if (espOnlySelected && !BlockEsp.isSelected(b)) continue;
+                if (!q.isEmpty()) {
+                    String n = b.getName().getString().toLowerCase(java.util.Locale.ROOT);
+                    String id = Registries.BLOCK.getId(b).getPath();
+                    if (!n.contains(q) && !id.contains(q)) continue;
+                }
+                out.add(b);
+            }
+            espFiltered = out;
+        }
+        return espFiltered;
+    }
+
     private class PickerControl extends Control {
         int mode = 0; // 1 Farbfeld, 2 Farbton
 
@@ -724,6 +738,8 @@ public class MenuScreen extends Screen {
         titleField = null;
         fields.clear();
 
+        controls.add(new IconBtn(left + W - 72, top + 12, 2, "Block-ESP", () -> activeTab == Tab.ESP || ModConfig.get().espEnabled, () ->
+                openTab(activeTab == Tab.ESP ? Tab.HOME : Tab.ESP)));
         controls.add(new IconBtn(left + W - 50, top + 12, 1, "Freecam", () -> activeTab == Tab.FREECAM || Freecam.active(), () ->
                 openTab(activeTab == Tab.FREECAM ? Tab.HOME : Tab.FREECAM)));
         controls.add(new IconBtn(left + W - 28, top + 12, 0, "Design", () -> activeTab == Tab.SETTINGS, () ->
@@ -747,10 +763,10 @@ public class MenuScreen extends Screen {
             case SELL -> buildSell();
             case REPAIR -> buildRepair();
             case AFK -> buildAfk();
-            case CRYSTAL -> buildCrystal();
             case PROGRESS -> buildProgress();
             case CALC -> buildCalc();
             case FREECAM -> buildFreecam();
+            case ESP -> buildEsp();
         }
     }
 
@@ -764,50 +780,26 @@ public class MenuScreen extends Screen {
 
     // ---- Startseite
 
-    private record Cat(String title, Item icon, Tab[] tabs) {}
+    private record Group(String title, int row, int side, Tab[] tabs) {}
 
-    private static final Cat[] CATS = {
-            new Cat("Verkauf", Items.GOLD_BLOCK, new Tab[]{Tab.AUCTION, Tab.SELL}),
-            new Cat("Litematica", Items.BRICKS, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
-            new Cat("Automatik", Items.REDSTONE, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
-            new Cat("Kosmetik", Items.NAME_TAG, new Tab[]{Tab.CAPES, Tab.MINIMI}),
-            new Cat("Extras", Items.NETHER_STAR, new Tab[]{Tab.CALC, Tab.AFK, Tab.CRYSTAL}),
+    private static final Group[] GROUPS = {
+            new Group("Verkauf", 0, 0, new Tab[]{Tab.AUCTION, Tab.SELL}),
+            new Group("Litematica", 0, 1, new Tab[]{Tab.MAPART, Tab.PROGRESS}),
+            new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
+            new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.MINIMI}),
+            new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
     };
-    private static final int CAT_R = 26, RING_R = 62, ICON = 30;
+    private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
-    private int catCx(int i) { return left + Math.round(W * (i + 0.5f) / CATS.length); }
-    private int catCy() { return top + 146; }
-
-    private static float easeOutBack(float t) {
-        t = Math.max(0f, Math.min(1f, t));
-        float c1 = 1.70158f, c3 = c1 + 1f;
-        float u = t - 1f;
-        return 1f + c3 * u * u * u + c1 * u * u;
-    }
-
-    private static void fillCircle(DrawContext ctx, int cxp, int cyp, int r, int color) {
-        for (int dy = -r; dy <= r; dy++) {
-            int hw = (int) Math.round(Math.sqrt((double) r * r - (double) dy * dy));
-            if (hw <= 0) continue;
-            ctx.fill(cxp - hw, cyp + dy, cxp + hw, cyp + dy + 1, color);
+    private int groupX(Group g) {
+        if (g.side() != 1) return left + 14;
+        int w0 = 0;
+        for (Group o : GROUPS) {
+            if (o.row() == g.row() && o.side() != 1) w0 = o.tabs().length * TILE_W + (o.tabs().length - 1) * TILE_GAP;
         }
+        return left + 14 + w0 + 12;
     }
-
-    private static void ringCircle(DrawContext ctx, int cxp, int cyp, int R, int color) {
-        int r = R - 1;
-        for (int dy = -R; dy <= R; dy++) {
-            int wo = (int) Math.round(Math.sqrt((double) R * R - (double) dy * dy));
-            if (wo <= 0) continue;
-            if (Math.abs(dy) >= r) {
-                ctx.fill(cxp - wo, cyp + dy, cxp + wo, cyp + dy + 1, color);
-            } else {
-                int wi = (int) Math.round(Math.sqrt((double) r * r - (double) dy * dy));
-                if (wi >= wo) wi = wo - 1;
-                ctx.fill(cxp - wo, cyp + dy, cxp - wi, cyp + dy + 1, color);
-                ctx.fill(cxp + wi, cyp + dy, cxp + wo, cyp + dy + 1, color);
-            }
-        }
-    }
+    private int groupY(Group g) { return top + 48 + g.row() * 68; }
 
     private static Item tileItem(Tab t) {
         return switch (t) {
@@ -815,8 +807,8 @@ public class MenuScreen extends Screen {
             case SELL -> Items.EMERALD;
             case REPAIR -> Items.DIAMOND_PICKAXE;
             case AFK -> Items.RED_BED;
-            case CRYSTAL -> Items.END_CRYSTAL;
             case FREECAM -> Items.ENDER_EYE;
+            case ESP -> Items.DIAMOND_ORE;
             case HT1 -> Items.IRON_SWORD;
             case SPAWNER -> Items.SPAWNER;
             case RECORDER -> Items.CLOCK;
@@ -865,7 +857,6 @@ public class MenuScreen extends Screen {
             case SELL -> SellMacro.running() ? "LÄUFT" : c.cellAuto ? "AUTO" : "AUS";
             case REPAIR -> AutoRepair.running() ? "LÄUFT" : c.repairEnabled ? "AN" : "AUS";
             case AFK -> AfkGuard.active() ? "AN" : "AUS";
-            case CRYSTAL -> c.crystalLimit ? "AN" : "AUS";
             case MINIMI -> c.minimiEnabled ? "AN" : "AUS";
             case FREECAM -> Freecam.active() ? "AN" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
@@ -881,22 +872,11 @@ public class MenuScreen extends Screen {
     }
 
     private void buildHome() {
-        // Zuerst die Kreise, danach die Symbole (werden beim Klick zuerst geprueft)
-        for (int i = 0; i < CATS.length; i++) controls.add(new CatCircle(i));
-        for (int i = 0; i < CATS.length; i++) {
-            Tab[] tabs = CATS[i].tabs();
-            for (int j = 0; j < tabs.length; j++) controls.add(new RingIcon(i, j, tabs[j]));
+        for (Group g : GROUPS) {
+            for (int i = 0; i < g.tabs().length; i++) {
+                controls.add(new Tile(groupX(g) + i * (TILE_W + TILE_GAP), groupY(g) + 14, TILE_W, TILE_H, g.tabs()[i]));
+            }
         }
-    }
-
-    // ---- Crystal-Limit
-
-    private void buildCrystal() {
-        ModConfig cfg = ModConfig.get();
-        controls.add(new Tog(cx + 6, cy + 26, COL - 12, "Crystal-Limit aktiv",
-                () -> cfg.crystalLimit, v -> { cfg.crystalLimit = v; ModConfig.save(); }));
-        controls.add(new Sld(cx + 12, cy + 62, COL - 24, "Zeitfenster", " s", 1, 5,
-                () -> Math.max(1, Math.min(5, cfg.crystalLimitSec)), v -> cfg.crystalLimitSec = v));
     }
 
     // ---- Freecam
@@ -1250,6 +1230,74 @@ public class MenuScreen extends Screen {
                 .enabledIf(() -> !cfg.progressExcluded.isEmpty()));
     }
 
+    // ---- Block-ESP
+
+    private void buildEsp() {
+        ModConfig cfg = ModConfig.get();
+
+        TextFieldWidget sf = addField(new TextFieldWidget(textRenderer, cx + 6, cy + 20, LIST_W - 12, 16, Text.literal("Suche")));
+        sf.setMaxLength(40);
+        sf.setText(espSearch);
+        sf.setChangedListener(t -> { espSearch = t; espScroll = 0; });
+
+        controls.add(new EspList(cx + 6, cy + 40, LIST_W - 12, 6));
+        int by = cy + 174;
+        controls.add(new Btn(cx + 6, by, 30, 14, () -> "▲▲", () -> espScroll = Math.max(0, espScroll - 6)));
+        controls.add(new Btn(cx + 38, by, 30, 14, () -> "▲", () -> espScroll = Math.max(0, espScroll - 1)));
+        controls.add(new Btn(cx + 70, by, 30, 14, () -> "▼", () -> espScroll++));
+        controls.add(new Btn(cx + 102, by, 30, 14, () -> "▼▼", () -> espScroll += 6));
+        controls.add(new Btn(cx + 138, by, LIST_W - 12 - 132, 14,
+                () -> espOnlySelected ? "Alle Blöcke" : "Nur Auswahl",
+                () -> { espOnlySelected = !espOnlySelected; espScroll = 0; }));
+
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        controls.add(new Tog(rx - 6, cy + 22, rw + 12, "Block-ESP aktiv",
+                () -> cfg.espEnabled, v -> { cfg.espEnabled = v; ModConfig.save(); BlockEsp.invalidate(); }));
+        controls.add(new Tog(rx - 6, cy + 46, rw + 12, "Tracer zur Bildmitte",
+                () -> cfg.espTracers, v -> { cfg.espTracers = v; ModConfig.save(); }));
+        controls.add(new Sld(rx, cy + 76, rw, "Reichweite", " Blöcke", 8, 64,
+                () -> Math.max(8, Math.min(64, cfg.espRange)), v -> cfg.espRange = v));
+        controls.add(new Sld(rx, cy + 106, rw, "Max. angezeigt", "", 10, 500,
+                () -> Math.max(10, Math.min(500, cfg.espMaxBlocks)), v -> cfg.espMaxBlocks = v));
+
+        int hw = (rw - 4) / 2;
+        controls.add(new Btn(rx, cy + 138, hw, 18, () -> "Alle Erze", () -> {
+            int n = BlockEsp.addOres();
+            espStatus = n > 0 ? n + " Erze hinzugefügt." : "Erze sind schon gewählt.";
+        }));
+        controls.add(new Btn(rx + hw + 4, cy + 138, hw, 18, () -> "Kisten/Spawner", () -> {
+            int n = BlockEsp.addStorage();
+            espStatus = n > 0 ? n + " Blöcke hinzugefügt." : "Schon gewählt.";
+        }));
+        controls.add(new Btn(rx, cy + 160, hw, 18, () -> "Block aus Hand", () -> {
+            if (client == null || client.player == null
+                    || !(client.player.getMainHandStack().getItem() instanceof net.minecraft.item.BlockItem bi)) {
+                espStatus = "Nimm erst einen Block in die Hand.";
+                return;
+            }
+            Block hb = bi.getBlock();
+            if (!BlockEsp.isSelected(hb)) BlockEsp.toggle(hb);
+            espStatus = "Hinzugefügt: " + hb.getName().getString();
+        }));
+        controls.add(new Btn(rx + hw + 4, cy + 160, hw, 18, () -> "Alle abwählen", () -> {
+            BlockEsp.clear();
+            espStatus = "Auswahl geleert.";
+        }).enabledIf(() -> !cfg.espBlocks.isEmpty()));
+    }
+
+    private void renderEsp(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        int rx = cx + LIST_W + 20;
+        String info = cfg.espBlocks.isEmpty()
+                ? "Noch keine Blöcke gewählt."
+                : "Gewählt: " + cfg.espBlocks.size() + "   Gefunden: " + BlockEsp.found();
+        text(ctx, info, rx, cy + 182, 0xFF9A9AA8);
+        String st = espStatus;
+        boolean has = st != null && !st.isEmpty();
+        text(ctx, has ? st : "Tipp: \"Ansicht wackeln\" aus = Linien sitzen genau. Taste H: an/aus.",
+                cx, top + H - 24, has ? 0xFFFFD866 : 0xFF777783);
+    }
+
     private void buildCapes() {
         List<CapeManager.Entry> list = CapeManager.list();
         int maxScroll = Math.max(0, list.size() - CAPE_ROWS);
@@ -1295,6 +1343,8 @@ public class MenuScreen extends Screen {
                 () -> cfg.combatLockNeedsPlayer, v -> { cfg.combatLockNeedsPlayer = v; ModConfig.save(); }));
         controls.add(new Sld(cx + 12, cy + 90, COL - 24, "Verzögerung", " s", 0, 19,
                 () -> Math.max(0, Math.min(19, cfg.combatLockDelaySec)), v -> cfg.combatLockDelaySec = v));
+        controls.add(new Tog(cx + COL2 + 6, cy + 126, COL - 12, "Axt gegen Schild",
+                () -> cfg.shieldAxe, v -> { cfg.shieldAxe = v; ModConfig.save(); }));
     }
 
     private void buildSpawner() {
@@ -1722,17 +1772,6 @@ public class MenuScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        // Kategorie-Animation (zeitbasiert, unabhaengig von der Bildrate)
-        float nowT = time();
-        float dt = Math.max(0f, Math.min(0.1f, nowT - lastFrameT));
-        lastFrameT = nowT;
-        boolean anim = ModConfig.get().menuAnimations;
-        for (int i = 0; i < catAmt.length; i++) {
-            float target = i == openCat ? 1f : 0f;
-            if (!anim) catAmt[i] = target;
-            else if (target > catAmt[i]) catAmt[i] = Math.min(target, catAmt[i] + dt / 0.32f);
-            else catAmt[i] = Math.max(target, catAmt[i] - dt / 0.22f);
-        }
         if (activeTab == Tab.PROGRESS && SchematicProgress.version() != progSeen) {
             progSeen = SchematicProgress.version();
             clearAndInit();
@@ -1760,7 +1799,6 @@ public class MenuScreen extends Screen {
         super.render(ctx, mouseX, mouseY, delta); // Hintergrund + Textfeld
 
         hoverCape = null;
-        tipText = null;
         renderBackdrop(ctx);
         List<Control> snapshot = new ArrayList<>(controls);
         for (TextFieldWidget f : fields) f.render(ctx, mouseX, mouseY, delta); // ueber den Karten
@@ -1797,6 +1835,10 @@ public class MenuScreen extends Screen {
                 card(ctx, px, cy - 4, left + W - 14 - px, 196, "Menü");
             }
             case FREECAM -> card(ctx, cx, cy - 4, COL, 158, "Freecam");
+            case ESP -> {
+                card(ctx, cx, cy - 4, LIST_W, 194, "Blöcke (Klick = an/aus)");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Block-ESP");
+            }
             case MINIMI -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Skins");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Minimi");
@@ -1821,17 +1863,7 @@ public class MenuScreen extends Screen {
                 card(ctx, cx, cy + 16, LIST_W, 174, "Blöcke (Klick = ausschließen)");
                 card(ctx, cx + LIST_W + 10, cy + 16, cw - LIST_W - 10, 174, "Einstellungen");
             }
-            case HOME -> {
-                int acc = Theme.accent();
-                for (int i = 0; i < CATS.length; i++) {
-                    float a = catAmt[i];
-                    if (a > 0.02f) ringCircle(ctx, catCx(i), catCy(), Math.max(2, Math.round(RING_R * easeOutBack(a))), alpha(acc, 0.20f * clamp01(a * 1.5f)));
-                }
-            }
-            case CRYSTAL -> {
-                card(ctx, cx, cy - 4, COL, 150, "Crystal-Limit");
-                card(ctx, cx + COL2, cy - 4, COL, 150, "So funktioniert es");
-            }
+            case HOME -> { }
             case CAPES -> {
                 int rx = cx + LIST_W + 10, rw = cx + cw - rx;
                 card(ctx, rx, cy, rw, 126, null);
@@ -1879,51 +1911,35 @@ public class MenuScreen extends Screen {
             case RECORDER -> renderRecorder(ctx);
             case SELL -> renderSell(ctx);
             case AFK -> renderAfk(ctx);
-            case CRYSTAL -> renderCrystal(ctx);
             case MINIMI -> renderMinimi(ctx);
             case REPAIR -> renderRepair(ctx);
             case PROGRESS -> renderProgress(ctx);
             case HOME -> renderHome(ctx);
             case FREECAM -> renderFreecam(ctx);
+            case ESP -> renderEsp(ctx);
         }
     }
 
     private void renderHome(DrawContext ctx) {
         int acc = Theme.accent();
-        ModConfig c = ModConfig.get();
-        if (openCat < 0 && catAmt[0] + catAmt[1] + catAmt[2] + catAmt[3] + catAmt[4] < 0.05f) {
-            textCentered(ctx, "Kategorie anklicken – die Funktionen klappen rundherum auf",
-                    left + W / 2, top + 52, alpha(0xFFFFFF, 0.45f));
+        for (Group g : GROUPS) {
+            int gx = groupX(g), gy = groupY(g);
+            int gw = g.tabs().length * TILE_W + (g.tabs().length - 1) * TILE_GAP;
+            String l = g.title().toUpperCase(java.util.Locale.ROOT);
+            text(ctx, l, gx + 2, gy + 2, alpha(acc, 0.9f));
+            int lx = gx + 8 + textRenderer.getWidth(l);
+            ctx.fill(lx, gy + 6, gx + gw, gy + 7, alpha(0xFFFFFF, 0.12f));
         }
+        ModConfig c = ModConfig.get();
         List<String> on = new ArrayList<>();
         if (c.autoPlace) on.add("Auto-Platzieren");
         if (c.combatLock) on.add("Combat Lock");
         if (c.spawnerGuard) on.add("Spawner-Schutz");
-        if (c.crystalLimit) on.add("Crystal-Limit");
+        if (c.espEnabled) on.add("Block-ESP");
         if (AuctionMacro.running()) on.add("Auktions-Makro");
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");
-        text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + shorten(String.join(", ", on), 60),
+        text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
                 left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);
-
-        if (tipText != null) {
-            int tw = textRenderer.getWidth(tipText) + 12;
-            int tx = Math.max(left + 4, Math.min(left + W - 4 - tw, tipX - tw / 2));
-            ctx.fill(tx, tipY, tx + tw, tipY + 15, 0xF0121218);
-            outline(ctx, tx, tipY, tw, 15, alpha(acc, 0.7f));
-            text(ctx, tipText, tx + 6, tipY + 4, 0xFFFFFFFF);
-        }
-    }
-
-    private void renderCrystal(DrawContext ctx) {
-        ModConfig cfg = ModConfig.get();
-        int rx = cx + COL2 + 12;
-        drawWrapped(ctx, "Auf einem einzelnen Obsidian werden höchstens 2 Crystals pro Zeitfenster platziert.",
-                rx, cy + 26, COL - 24, 0xFFCCCCCC);
-        drawWrapped(ctx, "Platzieren, Pop, platzieren, Pop – der dritte Rechtsklick wird verworfen, bis die Zeit für das älteste Crystal abgelaufen ist.",
-                rx, cy + 62, COL - 24, 0xFFCCCCCC);
-        drawWrapped(ctx, "Gilt für jeden Obsidian einzeln.", rx, cy + 118, COL - 24, 0xFF777783);
-        text(ctx, cfg.crystalLimit ? "Aktiv: max. 2 pro " + cfg.crystalLimitSec + " s" : "Aus",
-                cx + 12, cy + 100, cfg.crystalLimit ? 0xFF66DD99 : 0xFF999999);
     }
 
     private void renderMinimi(DrawContext ctx) {

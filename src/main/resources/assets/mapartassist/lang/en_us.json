@@ -6,5 +6,6 @@
   "key.mapartassist.spawner": "Toggle Spawner Guard",
   "key.mapartassist.freecam": "Toggle freecam",
   "key.mapartassist.record": "Record movement start/stop",
-  "key.mapartassist.play": "Play movement / stop"
+  "key.mapartassist.play": "Play movement / stop",
+  "key.mapartassist.esp": "Toggle Block ESP"
 }
