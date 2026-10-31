@@ -62,6 +62,9 @@ public class ModConfig {
     public int repairStacks = 2;
     public boolean repairResume = true;
     public String repairCategory = "Ausrüstung";
+    /** Crystal-Limit (CrystalLimit.java): an/aus und Zeitfenster in Sekunden (1-5). */
+    public boolean crystalLimit = false;
+    public int crystalLimitSec = 3;
     /** Block-ESP: Umrisse ausgewaehlter Bloecke durch Waende. */
     public boolean espEnabled = false;
     /** Registry-IDs der Bloecke, die angezeigt werden (z. B. minecraft:diamond_ore). */
@@ -184,6 +187,7 @@ public class ModConfig {
                 loaded.repairThreshold = Math.max(1, Math.min(500, loaded.repairThreshold));
                 loaded.repairStacks = Math.max(1, Math.min(4, loaded.repairStacks));
                 if (loaded.espBlocks == null) loaded.espBlocks = new ArrayList<>();
+                loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 3 : loaded.crystalLimitSec));
                 loaded.espRange = Math.max(8, Math.min(64, loaded.espRange <= 0 ? 32 : loaded.espRange));
                 loaded.espMaxBlocks = Math.max(10, Math.min(500, loaded.espMaxBlocks <= 0 ? 200 : loaded.espMaxBlocks));
                 if (loaded.progressExcluded == null) loaded.progressExcluded = new ArrayList<>();
