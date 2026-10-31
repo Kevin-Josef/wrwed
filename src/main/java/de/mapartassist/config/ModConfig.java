@@ -72,6 +72,10 @@ public class ModConfig {
     public int espMaxBlocks = 200;
     /** Linie von der Bildmitte zu jedem Block. */
     public boolean espTracers = false;
+
+    /** Crystal-Limit (von CrystalLimit.java benutzt). */
+    public boolean crystalLimit = false;
+    public int crystalLimitSec = 1;
     /** Freecam-Geschwindigkeit in Bloecken pro Sekunde. */
     public int freecamSpeed = 8;
     /** Bewegungs-Recorder: endlos wiederholen / Anzahl Wiederholungen / Blickrichtung relativ zum Start. */
@@ -185,6 +189,7 @@ public class ModConfig {
                 loaded.repairStacks = Math.max(1, Math.min(4, loaded.repairStacks));
                 if (loaded.espBlocks == null) loaded.espBlocks = new ArrayList<>();
                 loaded.espRange = Math.max(8, Math.min(128, loaded.espRange <= 0 ? 32 : loaded.espRange));
+                loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 1 : loaded.crystalLimitSec));
                 loaded.espMaxBlocks = Math.max(10, Math.min(500, loaded.espMaxBlocks <= 0 ? 200 : loaded.espMaxBlocks));
                 if (loaded.progressExcluded == null) loaded.progressExcluded = new ArrayList<>();
                 if (loaded.selectedRecording == null) loaded.selectedRecording = "";
