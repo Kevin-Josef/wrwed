@@ -135,6 +135,9 @@ public class ModConfig {
     public boolean spawnerGuardLeaveAfter = false;
     /** Sekunden zwischen Befehl und Verlassen (damit der Teleport ankommt). */
     public int spawnerGuardLeaveDelaySec = 3;
+    /** Crystal-Limit (CrystalLimit.java): an/aus und Zeitfenster in Sekunden (1-5). */
+    public boolean crystalLimit = false;
+    public int crystalLimitSec = 1;
     /** Spieler-Alarm (z. B. fuer den AFK-Account): naehert sich ein Spieler, wird automatisch /msg gesendet. */
     public boolean alertEnabled = false;
     /** Empfaenger der Nachricht (Spielername, z. B. der Hauptaccount). */
@@ -216,6 +219,7 @@ public class ModConfig {
                 loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
                 loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
+                loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 1 : loaded.crystalLimitSec));
                 if (loaded.alertTarget == null) loaded.alertTarget = "";
                 if (loaded.alertMessage == null || loaded.alertMessage.isBlank()) loaded.alertMessage = "{player}";
                 if (loaded.alertCommand == null || loaded.alertCommand.isBlank()) loaded.alertCommand = "msg";
