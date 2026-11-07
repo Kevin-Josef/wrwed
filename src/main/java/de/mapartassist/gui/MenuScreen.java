@@ -14,6 +14,8 @@ import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.macro.SellMacro;
 import de.mapartassist.mini.Minimi;
 import de.mapartassist.guard.SpawnerGuard;
+import de.mapartassist.alert.PlayerAlert;
+import de.mapartassist.hud.ItemHud;
 import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.block.Block;
 import net.minecraft.client.gui.DrawContext;
@@ -66,7 +68,9 @@ public class MenuScreen extends Screen {
         PROGRESS("Litematica", "Fortschritt"),
         SETTINGS(null, "Design"),
         FREECAM("Extras", "Freecam"),
-        ESP("Extras", "Block-ESP");
+        ESP("Extras", "Block-ESP"),
+        ALERT("Spieler", "Spieler-Alarm"),
+        ITEMS("Spieler", "Item-Anzeige");
 
         final String group, label;
         Tab(String group, String label) { this.group = group; this.label = label; }
@@ -74,7 +78,7 @@ public class MenuScreen extends Screen {
     }
 
     /** Fenstergroesse (ohne Seitenleiste: Startseite mit Kacheln). */
-    private static final int W = 636, H = 292;
+    private static final int W = 636, H = 340;
     private static final int S = 100, HUE_W = 14;
     private static final int ROW_H = 30, CAPE_ROWS = 5, LIST_W = 230;
 
@@ -99,6 +103,16 @@ public class MenuScreen extends Screen {
     private static String espLastSearch = null;
     private static boolean espLastOnly = false;
     private static int espLastSel = 0;
+    // Spieler-Alarm (MSG-Verlauf) und Item-Anzeige: Scroll/Suche bleiben erhalten
+    private static int alertScroll = 0;
+    private static String ihSearch = "";
+    private static boolean ihOnlySelected = false;
+    private static int ihScroll = 0;
+    private static List<Item> ihAll = null;
+    private static List<Item> ihFiltered = new ArrayList<>();
+    private static String ihLastSearch = null;
+    private static boolean ihLastOnly = false;
+    private static int ihLastSel = 0;
     private int progSeen = -1;
     private static String macroStatus = "";
     private static CapeCreator.Fit creatorFit = CapeCreator.Fit.CROP;
@@ -639,6 +653,114 @@ public class MenuScreen extends Screen {
         }
     }
 
+    /** Alle Items, nach Name sortiert; gefiltert nach Suche bzw. "nur gewaehlte" (Item-Anzeige). */
+    private static List<Item> itemPickList() {
+        if (ihAll == null) {
+            List<Item> all = new ArrayList<>();
+            for (Item it : Registries.ITEM) {
+                if (it != Items.AIR) all.add(it);
+            }
+            all.sort(java.util.Comparator.comparing(i -> i.getName().getString()));
+            ihAll = all;
+        }
+        String q = ihSearch.trim().toLowerCase(java.util.Locale.ROOT);
+        int selHash = ModConfig.get().itemHudItems.hashCode();
+        if (!q.equals(ihLastSearch) || ihOnlySelected != ihLastOnly || selHash != ihLastSel) {
+            ihLastSearch = q;
+            ihLastOnly = ihOnlySelected;
+            ihLastSel = selHash;
+            List<Item> out = new ArrayList<>();
+            for (Item it : ihAll) {
+                if (ihOnlySelected && !ItemHud.isSelected(it)) continue;
+                if (!q.isEmpty()) {
+                    String n = it.getName().getString().toLowerCase(java.util.Locale.ROOT);
+                    String id = Registries.ITEM.getId(it).getPath();
+                    if (!n.contains(q) && !id.contains(q)) continue;
+                }
+                out.add(it);
+            }
+            ihFiltered = out;
+        }
+        return ihFiltered;
+    }
+
+    /** Scrollbare Itemliste fuer die Item-Anzeige (Klick = an/aus). */
+    private class ItemPickList extends Control {
+        static final int ROW = 22;
+
+        ItemPickList(int x, int y, int w, int rows) {
+            this.x = x; this.y = y; this.w = w; this.h = rows * ROW;
+        }
+
+        int rows() { return h / ROW; }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            List<Item> list = itemPickList();
+            int maxScroll = Math.max(0, list.size() - rows());
+            ihScroll = Math.max(0, Math.min(ihScroll, maxScroll));
+            int acc = Theme.accent();
+            for (int i = 0; i < rows(); i++) {
+                int idx = ihScroll + i;
+                if (idx >= list.size()) break;
+                Item it = list.get(idx);
+                int ry = y + i * ROW;
+                boolean sel = ItemHud.isSelected(it);
+                boolean hov = mx >= x && mx < x + w && my >= ry && my < ry + ROW - 2;
+                int bg = sel ? alpha(acc, hov ? 0.40f : 0.28f) : (hov ? 0xFF30303C : 0xFF262631);
+                ctx.fill(x, ry, x + w, ry + ROW - 2, bg);
+                ctx.drawItem(new ItemStack(it), x + 3, ry + 2);
+                text(ctx, shorten(it.getName().getString(), 22), x + 24, ry + 7, sel ? 0xFFFFFFFF : 0xFFC8C8D2);
+                int bx = x + w - 16;
+                outline(ctx, bx, ry + 5, 10, 10, sel ? 0xFFFFFFFF : 0xFF5A5A68);
+                if (sel) ctx.fill(bx + 2, ry + 7, bx + 8, ry + 13, acc | 0xFF000000);
+            }
+            if (list.isEmpty()) text(ctx, "Keine Treffer.", x + 6, y + 6, 0xFF999999);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            List<Item> list = itemPickList();
+            int i = (my - y) / ROW;
+            int idx = ihScroll + i;
+            if (i < 0 || i >= rows() || idx >= list.size()) return;
+            ItemHud.toggle(list.get(idx));
+        }
+    }
+
+    /** MSG-Verlauf (neueste oben): Uhrzeit + Name, darunter der Text. */
+    private class MsgLog extends Control {
+        static final int ROW = 20;
+
+        MsgLog(int x, int y, int w, int rows) {
+            this.x = x; this.y = y; this.w = w; this.h = rows * ROW;
+        }
+
+        int rows() { return h / ROW; }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            List<PlayerAlert.Msg> hist = PlayerAlert.history();
+            int n = hist.size();
+            int maxScroll = Math.max(0, n - rows());
+            alertScroll = Math.max(0, Math.min(alertScroll, maxScroll));
+            for (int i = 0; i < rows(); i++) {
+                int idx = n - 1 - alertScroll - i; // neueste zuerst
+                if (idx < 0) break;
+                PlayerAlert.Msg m = hist.get(idx);
+                int ry = y + i * ROW;
+                ctx.fill(x, ry, x + w, ry + ROW - 2, 0xFF262631);
+                ctx.fill(x, ry, x + 2, ry + ROW - 2, m.outgoing ? 0xFFE0A030 : 0xFF34D399);
+                String head = PlayerAlert.timeOf(m) + "  " + (m.outgoing ? "→ " : "") + m.name;
+                text(ctx, shorten(head, 33), x + 6, ry + 1, m.outgoing ? 0xFFE0C070 : 0xFF66DD99);
+                text(ctx, shorten(m.text, 33), x + 6, ry + 10, 0xFFC8C8D2);
+            }
+            if (n == 0) {
+                text(ctx, "Noch keine Nachrichten.", x + 6, y + 6, 0xFF999999);
+            }
+        }
+    }
+
     /** Alle Bloecke mit Item, nach Name sortiert; gefiltert nach Suche bzw. "nur gewaehlte". */
     private static List<Block> espList() {
         if (espAll == null) {
@@ -767,6 +889,8 @@ public class MenuScreen extends Screen {
             case CALC -> buildCalc();
             case FREECAM -> buildFreecam();
             case ESP -> buildEsp();
+            case ALERT -> buildAlert();
+            case ITEMS -> buildItems();
         }
     }
 
@@ -788,6 +912,7 @@ public class MenuScreen extends Screen {
             new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
             new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.MINIMI}),
             new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
+            new Group("Spieler", 3, 0, new Tab[]{Tab.ALERT, Tab.ITEMS}),
     };
     private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
@@ -818,6 +943,8 @@ public class MenuScreen extends Screen {
             case MINIMI -> Items.PLAYER_HEAD;
             case CREATOR -> Items.PAINTING;
             case CALC -> Items.COMPARATOR;
+            case ALERT -> Items.BELL;
+            case ITEMS -> Items.TOTEM_OF_UNDYING;
             default -> Items.PINK_DYE;
         };
     }
@@ -861,6 +988,8 @@ public class MenuScreen extends Screen {
             case FREECAM -> Freecam.active() ? "AN" : "AUS";
             case HT1 -> c.combatLock ? "AN" : "AUS";
             case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
+            case ALERT -> c.alertEnabled ? "AN" : "AUS";
+            case ITEMS -> c.itemHudEnabled ? "AN" : "AUS";
             case MAPART -> c.autoPlace ? "AN" : "AUS";
             case RECORDER -> switch (MovementRecorder.state) {
                 case RECORDING -> "REC";
@@ -1231,6 +1360,89 @@ public class MenuScreen extends Screen {
     }
 
     // ---- Block-ESP
+
+    // ---- Spieler-Alarm (mit MSG-Verlauf)
+
+    private void buildAlert() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 20, LIST_W - 12, "Spieler-Alarm aktiv",
+                () -> cfg.alertEnabled, v -> { cfg.alertEnabled = v; ModConfig.save(); }));
+
+        TextFieldWidget tf = addField(new TextFieldWidget(textRenderer, cx + 10, cy + 56, LIST_W - 20, 16, Text.literal("Empfänger")));
+        tf.setMaxLength(16);
+        tf.setText(cfg.alertTarget == null ? "" : cfg.alertTarget);
+        tf.setChangedListener(t -> { cfg.alertTarget = t.trim(); ModConfig.save(); });
+
+        TextFieldWidget mf = addField(new TextFieldWidget(textRenderer, cx + 10, cy + 90, LIST_W - 20, 16, Text.literal("Nachricht")));
+        mf.setMaxLength(100);
+        mf.setText(cfg.alertMessage == null ? "{player}" : cfg.alertMessage);
+        mf.setChangedListener(t -> { cfg.alertMessage = t; ModConfig.save(); });
+
+        controls.add(new Sld(cx + 12, cy + 112, LIST_W - 24, "Radius", " Blöcke", 10, 100,
+                () -> Math.max(10, Math.min(100, cfg.alertRadius)), v -> cfg.alertRadius = v));
+        controls.add(new Sld(cx + 12, cy + 142, LIST_W - 24, "Pause pro Spieler", " s", 5, 600,
+                () -> Math.max(5, Math.min(600, cfg.alertCooldownSec)), v -> cfg.alertCooldownSec = v));
+
+        int rx = cx + LIST_W + 20, rw = cw - LIST_W - 30;
+        controls.add(new MsgLog(rx, cy + 22, rw, 7));
+        int by = cy + 168;
+        controls.add(new Btn(rx, by, 30, 14, () -> "▲", () -> alertScroll = Math.max(0, alertScroll - 1)));
+        controls.add(new Btn(rx + 34, by, 30, 14, () -> "▼", () -> alertScroll++));
+        controls.add(new Btn(rx + 70, by, rw - 70, 14, () -> "Verlauf leeren", () -> {
+            PlayerAlert.clearHistory();
+            alertScroll = 0;
+        }).enabledIf(() -> !PlayerAlert.history().isEmpty()));
+    }
+
+    private void renderAlert(DrawContext ctx) {
+        text(ctx, "Empfänger (z. B. Hauptaccount):", cx + 12, cy + 45, 0xFFCCCCCC);
+        text(ctx, "Nachricht ({player} = Name):", cx + 12, cy + 79, 0xFFCCCCCC);
+        String st = PlayerAlert.status;
+        text(ctx, st == null ? "" : shorten(st, 78), cx, top + H - 24, 0xFFFFD866);
+    }
+
+    // ---- Item-Anzeige
+
+    private void buildItems() {
+        ModConfig cfg = ModConfig.get();
+
+        TextFieldWidget sf = addField(new TextFieldWidget(textRenderer, cx + 6, cy + 20, LIST_W - 12, 16, Text.literal("Suche")));
+        sf.setMaxLength(40);
+        sf.setText(ihSearch);
+        sf.setChangedListener(t -> { ihSearch = t; ihScroll = 0; });
+
+        controls.add(new ItemPickList(cx + 6, cy + 40, LIST_W - 12, 6));
+        int by = cy + 174;
+        controls.add(new Btn(cx + 6, by, 30, 14, () -> "▲▲", () -> ihScroll = Math.max(0, ihScroll - 6)));
+        controls.add(new Btn(cx + 38, by, 30, 14, () -> "▲", () -> ihScroll = Math.max(0, ihScroll - 1)));
+        controls.add(new Btn(cx + 70, by, 30, 14, () -> "▼", () -> ihScroll++));
+        controls.add(new Btn(cx + 102, by, 30, 14, () -> "▼▼", () -> ihScroll += 6));
+        controls.add(new Btn(cx + 138, by, LIST_W - 12 - 132, 14,
+                () -> ihOnlySelected ? "Alle Items" : "Nur Auswahl",
+                () -> { ihOnlySelected = !ihOnlySelected; ihScroll = 0; }));
+
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        controls.add(new Tog(rx - 6, cy + 20, rw + 12, "Item-Anzeige aktiv",
+                () -> cfg.itemHudEnabled, v -> { cfg.itemHudEnabled = v; ModConfig.save(); }));
+        controls.add(new Tog(rx - 6, cy + 42, rw + 12, "Eigene Anzahl (HUD)",
+                () -> cfg.itemHudSelf, v -> { cfg.itemHudSelf = v; ModConfig.save(); }));
+        controls.add(new Tog(rx - 6, cy + 64, rw + 12, "Über Spielern anzeigen",
+                () -> cfg.itemHudPlayers, v -> { cfg.itemHudPlayers = v; ModConfig.save(); }));
+        controls.add(new Sld(rx, cy + 96, rw, "Position links/rechts", " %", 0, 95,
+                () -> Math.max(0, Math.min(95, cfg.itemHudX)), v -> cfg.itemHudX = v));
+        controls.add(new Sld(rx, cy + 124, rw, "Position oben/unten", " %", 0, 95,
+                () -> Math.max(0, Math.min(95, cfg.itemHudY)), v -> cfg.itemHudY = v));
+        controls.add(new Btn(rx, cy + 154, rw, 18, () -> "Auswahl leeren", ItemHud::clear)
+                .enabledIf(() -> !cfg.itemHudItems.isEmpty()));
+    }
+
+    private void renderItems(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        int rx = cx + LIST_W + 20;
+        text(ctx, "Gewählt: " + cfg.itemHudItems.size(), rx, cy + 176, 0xFF9A9AA8);
+        text(ctx, "Bei anderen Spielern zählt nur, was sichtbar ist (Hände + Rüstung).",
+                cx, top + H - 24, 0xFF777783);
+    }
 
     private void buildEsp() {
         ModConfig cfg = ModConfig.get();
@@ -1884,6 +2096,14 @@ public class MenuScreen extends Screen {
                 card(ctx, cx, cy - 4, 222, 190, null);
                 card(ctx, cx + 232, cy - 4, cw - 232, 190, "Verlauf");
             }
+            case ALERT -> {
+                card(ctx, cx, cy - 4, LIST_W, 194, "Spieler-Alarm (/msg)");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "MSG-Verlauf");
+            }
+            case ITEMS -> {
+                card(ctx, cx, cy - 4, LIST_W, 194, "Items (Klick = an/aus)");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Item-Anzeige");
+            }
             case AUCTION -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Auktion: Verkaufsliste");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Einstellungen");
@@ -1917,6 +2137,8 @@ public class MenuScreen extends Screen {
             case HOME -> renderHome(ctx);
             case FREECAM -> renderFreecam(ctx);
             case ESP -> renderEsp(ctx);
+            case ALERT -> renderAlert(ctx);
+            case ITEMS -> renderItems(ctx);
         }
     }
 
@@ -1935,6 +2157,8 @@ public class MenuScreen extends Screen {
         if (c.autoPlace) on.add("Auto-Platzieren");
         if (c.combatLock) on.add("Combat Lock");
         if (c.spawnerGuard) on.add("Spawner-Schutz");
+        if (c.alertEnabled) on.add("Spieler-Alarm");
+        if (c.itemHudEnabled) on.add("Item-Anzeige");
         if (c.espEnabled) on.add("Block-ESP");
         if (AuctionMacro.running()) on.add("Auktions-Makro");
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");

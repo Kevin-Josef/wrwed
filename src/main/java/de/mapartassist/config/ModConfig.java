@@ -72,10 +72,6 @@ public class ModConfig {
     public int espMaxBlocks = 200;
     /** Linie von der Bildmitte zu jedem Block. */
     public boolean espTracers = false;
-
-    /** Crystal-Limit (von CrystalLimit.java benutzt). */
-    public boolean crystalLimit = false;
-    public int crystalLimitSec = 1;
     /** Freecam-Geschwindigkeit in Bloecken pro Sekunde. */
     public int freecamSpeed = 8;
     /** Bewegungs-Recorder: endlos wiederholen / Anzahl Wiederholungen / Blickrichtung relativ zum Start. */
@@ -139,6 +135,27 @@ public class ModConfig {
     public boolean spawnerGuardLeaveAfter = false;
     /** Sekunden zwischen Befehl und Verlassen (damit der Teleport ankommt). */
     public int spawnerGuardLeaveDelaySec = 3;
+    /** Spieler-Alarm (z. B. fuer den AFK-Account): naehert sich ein Spieler, wird automatisch /msg gesendet. */
+    public boolean alertEnabled = false;
+    /** Empfaenger der Nachricht (Spielername, z. B. der Hauptaccount). */
+    public String alertTarget = "";
+    /** Nachrichtentext; {player} wird durch den Namen des genaeherten Spielers ersetzt. */
+    public String alertMessage = "{player}";
+    /** Befehl ohne Slash (Standard msg; manche Server nutzen w oder tell). */
+    public String alertCommand = "msg";
+    /** Radius in Bloecken, ab dem ein Spieler den Alarm ausloest. */
+    public int alertRadius = 50;
+    /** Pause in Sekunden, bevor derselbe Spieler erneut gemeldet wird. */
+    public int alertCooldownSec = 60;
+    /** Item-Anzeige: Anzahl ausgewaehlter Items als HUD und ueber Spielernamen. */
+    public boolean itemHudEnabled = false;
+    public List<String> itemHudItems = new ArrayList<>();
+    /** Position der eigenen Anzeige in Prozent der Bildschirmgroesse. */
+    public int itemHudX = 2;
+    public int itemHudY = 25;
+    public boolean itemHudSelf = true;
+    public boolean itemHudPlayers = true;
+    public int itemHudRange = 64;
     /** Menue-Einstellungen (Zahnrad oben rechts). */
     public int bgOpacity = 97;
     public boolean hexBackground = true;
@@ -189,7 +206,6 @@ public class ModConfig {
                 loaded.repairStacks = Math.max(1, Math.min(4, loaded.repairStacks));
                 if (loaded.espBlocks == null) loaded.espBlocks = new ArrayList<>();
                 loaded.espRange = Math.max(8, Math.min(128, loaded.espRange <= 0 ? 32 : loaded.espRange));
-                loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 1 : loaded.crystalLimitSec));
                 loaded.espMaxBlocks = Math.max(10, Math.min(500, loaded.espMaxBlocks <= 0 ? 200 : loaded.espMaxBlocks));
                 if (loaded.progressExcluded == null) loaded.progressExcluded = new ArrayList<>();
                 if (loaded.selectedRecording == null) loaded.selectedRecording = "";
@@ -200,6 +216,15 @@ public class ModConfig {
                 loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
                 loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
+                if (loaded.alertTarget == null) loaded.alertTarget = "";
+                if (loaded.alertMessage == null || loaded.alertMessage.isBlank()) loaded.alertMessage = "{player}";
+                if (loaded.alertCommand == null || loaded.alertCommand.isBlank()) loaded.alertCommand = "msg";
+                loaded.alertRadius = Math.max(10, Math.min(100, loaded.alertRadius <= 0 ? 50 : loaded.alertRadius));
+                loaded.alertCooldownSec = Math.max(5, Math.min(600, loaded.alertCooldownSec <= 0 ? 60 : loaded.alertCooldownSec));
+                if (loaded.itemHudItems == null) loaded.itemHudItems = new ArrayList<>();
+                loaded.itemHudX = Math.max(0, Math.min(95, loaded.itemHudX));
+                loaded.itemHudY = Math.max(0, Math.min(95, loaded.itemHudY));
+                loaded.itemHudRange = Math.max(8, Math.min(128, loaded.itemHudRange <= 0 ? 64 : loaded.itemHudRange));
                 INSTANCE = loaded;
                 save();
             }

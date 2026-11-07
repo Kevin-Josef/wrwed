@@ -13,6 +13,8 @@ import de.mapartassist.macro.SellMacro;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.gui.MenuScreen;
 import de.mapartassist.guard.SpawnerGuard;
+import de.mapartassist.alert.PlayerAlert;
+import de.mapartassist.hud.ItemHud;
 import de.mapartassist.macro.AuctionMacro;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
@@ -127,6 +129,8 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
         ClientTickEvents.END_CLIENT_TICK.register(SpawnerGuard::tick);
         ClientTickEvents.END_CLIENT_TICK.register(BlockEsp::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(PlayerAlert::tick);
+        PlayerAlert.init();
         // /sellmacro = /sell-Makro, /repairmacro = Auto-Reparatur (Test). Die Server-Befehle /sell und /shop bleiben frei.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(ClientCommandManager.literal("sellmacro")
@@ -202,6 +206,10 @@ public class MapArtAssistClient implements ClientModInitializer {
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "block_esp"),
                 (ctx, tickCounter) -> BlockEsp.render(ctx, MinecraftClient.getInstance()));
+        // Item-Anzeige (eigene Anzahl + ueber Spielernamen)
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+                Identifier.of("mapartassist", "item_hud"),
+                (ctx, tickCounter) -> ItemHud.render(ctx, MinecraftClient.getInstance()));
     }
 
     // ------------------------------------------------------------------ Auto-Schleichen

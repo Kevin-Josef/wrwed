@@ -285,7 +285,7 @@ public final class BlockEsp {
 
     // ------------------------------------------------------------------ Zeichnen (jeden Frame)
 
-    private static float partial() {
+    public static float partial() {
         float p = (System.nanoTime() - tickNs) / 50_000_000f;
         return Math.max(0f, Math.min(1f, p));
     }
@@ -378,6 +378,42 @@ public final class BlockEsp {
             }
             if (any || (cfg.espTracers && centerVisible)) drawn++;
         }
+    }
+
+    /**
+     * Projiziert einen Weltpunkt auf die HUD-Koordinaten (gleiche Mathematik wie die ESP).
+     * out[0] = x, out[1] = y (GUI-Pixel). Gibt false zurueck, wenn der Punkt hinter der Kamera liegt
+     * oder keine Ego-Ansicht aktiv ist.
+     */
+    public static boolean project(MinecraftClient mc, double wx, double wy, double wz, double[] out) {
+        if (mc.world == null || mc.player == null || mc.options == null) return false;
+        if (!mc.options.getPerspective().isFirstPerson()) return false;
+        Entity cam = mc.getCameraEntity();
+        if (cam == null) cam = mc.player;
+        float pt = partial();
+        Vec3d lp = cam.getLerpedPos(pt);
+        double ex = lp.x, ey = lp.y + (cam.getEyeY() - cam.getY()), ez = lp.z;
+        double yaw = Math.toRadians(cam.getYaw(pt));
+        double pitch = Math.toRadians(cam.getPitch(pt));
+        double sy = Math.sin(yaw), cyw = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
+        double fx = -sy * cp, fy = -sp, fz = cyw * cp;
+        double rx = -cyw, ry = 0, rz = -sy;
+        double ux = -sy * sp, uy = cp, uz = cyw * sp;
+        float fovMulNow = lastFovMul + (fovMul - lastFovMul) * pt;
+        double fov = mc.options.getFov().getValue() * fovMulNow;
+        double tanHalf = Math.tan(Math.toRadians(fov) / 2.0);
+        int sw = mc.getWindow().getScaledWidth(), sh = mc.getWindow().getScaledHeight();
+        double aspect = mc.getWindow().getFramebufferWidth() / (double) Math.max(1, mc.getWindow().getFramebufferHeight());
+        double kx = (sw / 2.0) / (tanHalf * aspect);
+        double ky = (sh / 2.0) / tanHalf;
+        double ax = wx - ex, ay = wy - ey, az = wz - ez;
+        double z = ax * fx + ay * fy + az * fz;
+        if (z < NEAR) return false;
+        double x = ax * rx + ay * ry + az * rz;
+        double y = ax * ux + ay * uy + az * uz;
+        out[0] = sw / 2.0 + x * kx / z;
+        out[1] = sh / 2.0 - y * ky / z;
+        return true;
     }
 
     /** Kante mit Near-Plane-Clipping projizieren und zeichnen. true, wenn etwas sichtbar war. */
