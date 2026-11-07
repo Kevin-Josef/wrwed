@@ -1378,8 +1378,8 @@ public class MenuScreen extends Screen {
         mf.setText(cfg.alertMessage == null ? "{player}" : cfg.alertMessage);
         mf.setChangedListener(t -> { cfg.alertMessage = t; ModConfig.save(); });
 
-        controls.add(new Sld(cx + 12, cy + 112, LIST_W - 24, "Radius", " Blöcke", 10, 100,
-                () -> Math.max(10, Math.min(100, cfg.alertRadius)), v -> cfg.alertRadius = v));
+        controls.add(new Sld(cx + 12, cy + 112, LIST_W - 24, "Radius", " Blöcke", 10, 256,
+                () -> Math.max(10, Math.min(256, cfg.alertRadius)), v -> cfg.alertRadius = v));
         controls.add(new Sld(cx + 12, cy + 142, LIST_W - 24, "Pause pro Spieler", " s", 5, 600,
                 () -> Math.max(5, Math.min(600, cfg.alertCooldownSec)), v -> cfg.alertCooldownSec = v));
 

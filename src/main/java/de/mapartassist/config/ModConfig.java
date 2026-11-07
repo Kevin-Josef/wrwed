@@ -223,7 +223,7 @@ public class ModConfig {
                 if (loaded.alertTarget == null) loaded.alertTarget = "";
                 if (loaded.alertMessage == null || loaded.alertMessage.isBlank()) loaded.alertMessage = "{player}";
                 if (loaded.alertCommand == null || loaded.alertCommand.isBlank()) loaded.alertCommand = "msg";
-                loaded.alertRadius = Math.max(10, Math.min(100, loaded.alertRadius <= 0 ? 50 : loaded.alertRadius));
+                loaded.alertRadius = Math.max(10, Math.min(256, loaded.alertRadius <= 0 ? 50 : loaded.alertRadius));
                 loaded.alertCooldownSec = Math.max(5, Math.min(600, loaded.alertCooldownSec <= 0 ? 60 : loaded.alertCooldownSec));
                 if (loaded.itemHudItems == null) loaded.itemHudItems = new ArrayList<>();
                 loaded.itemHudX = Math.max(0, Math.min(95, loaded.itemHudX));
