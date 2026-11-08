@@ -1017,9 +1017,16 @@ public class MenuScreen extends Screen {
     private void buildFreecam() {
         ModConfig cfg = ModConfig.get();
         controls.add(new Tog(cx + 6, cy + 28, COL - 12, "Freecam",
-                () -> Freecam.active(), v -> Freecam.set(client, v)));
+                () -> Freecam.freeFlying(), v -> Freecam.set(client, v)));
         controls.add(new Sld(cx + 12, cy + 58, COL - 24, "Geschwindigkeit", " Blöcke/s", 1, 40,
                 () -> cfg.freecamSpeed, v -> cfg.freecamSpeed = v));
+        int fx = cx + COL + 10, fw = cw - COL - 10;
+        controls.add(new Tog(fx + 6, cy + 28, fw - 12, "Verfolger-Kamera",
+                () -> Freecam.following(), v -> Freecam.setFollow(client, v)));
+        controls.add(new Sld(fx + 12, cy + 58, fw - 24, "Abstand", " Blöcke", 2, 30,
+                () -> Math.max(2, Math.min(30, cfg.followDistance)), v -> cfg.followDistance = v));
+        controls.add(new Sld(fx + 12, cy + 88, fw - 24, "Höhe", " Blöcke", 0, 20,
+                () -> Math.max(0, Math.min(20, cfg.followHeight)), v -> cfg.followHeight = v));
     }
 
     private TextFieldWidget addField(TextFieldWidget f) {
@@ -2062,7 +2069,10 @@ public class MenuScreen extends Screen {
                 card(ctx, bx, cy - 4, SET_B, 196, "Hintergrund");
                 card(ctx, px, cy - 4, left + W - 14 - px, 196, "Menü");
             }
-            case FREECAM -> card(ctx, cx, cy - 4, COL, 158, "Freecam");
+            case FREECAM -> {
+                card(ctx, cx, cy - 4, COL, 158, "Freecam");
+                card(ctx, cx + COL + 10, cy - 4, cw - COL - 10, 158, "Verfolger-Kamera");
+            }
             case ESP -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Blöcke (Klick = an/aus)");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Block-ESP");
@@ -2288,6 +2298,8 @@ public class MenuScreen extends Screen {
                 rx, cy + 92, COL - 24, 0xFFCCCCCC);
         drawWrapped(ctx, "W/A/S/D bewegen, Leertaste hoch, Shift runter, Strg schneller.",
                 rx, cy + 116, COL - 24, 0xFF777783);
+        drawWrapped(ctx, "Kamera folgt dir hinter/über dir, du spielst normal weiter (z. B. Stripminen).",
+                cx + COL + 22, cy + 122, cw - COL - 34, 0xFFCCCCCC);
     }
 
     private void renderSpawner(DrawContext ctx) {

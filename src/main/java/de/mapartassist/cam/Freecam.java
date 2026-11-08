@@ -1,6 +1,7 @@
 package de.mapartassist.cam;
 
 import de.mapartassist.config.ModConfig;
+import de.mapartassist.esp.BlockEsp;
 import de.mapartassist.macro.MovementRecorder;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -23,6 +24,8 @@ public final class Freecam {
     private Freecam() {}
 
     private static boolean active = false;
+    /** Verfolger-Modus: Kamera folgt dem Spieler, der normal weiterspielt. */
+    private static boolean follow = false;
     private static ArmorStandEntity cam;
     private static ClientWorld world;
     private static double x, y, z, eyeOff;
@@ -31,14 +34,32 @@ public final class Freecam {
 
     public static boolean active() { return active; }
 
+    public static boolean following() { return active && follow; }
+
     public static void set(MinecraftClient mc, boolean on) {
-        if (on) start(mc);
-        else stop(mc);
+        if (on) {
+            if (active && follow) stop(mc); // Modus wechseln
+            start(mc, false);
+        } else if (active && !follow) stop(mc);
     }
 
-    public static void toggle(MinecraftClient mc) { set(mc, !active); }
+    /** Verfolger-Kamera an/aus (Spieler spielt normal weiter). */
+    public static void setFollow(MinecraftClient mc, boolean on) {
+        if (on) {
+            if (active && !follow) stop(mc);
+            start(mc, true);
+        } else if (active && follow) stop(mc);
+    }
 
-    private static void start(MinecraftClient mc) {
+    public static void toggle(MinecraftClient mc) {
+        if (active) stop(mc);
+        else start(mc, false);
+    }
+
+    /** Nur die freie Freecam (nicht der Verfolger-Modus). */
+    public static boolean freeFlying() { return active && !follow; }
+
+    private static void start(MinecraftClient mc, boolean followMode) {
         if (active || mc.player == null || mc.world == null) return;
         // Eine laufende Wiedergabe (Recorder) bleibt absichtlich aktiv.
         if (MovementRecorder.state == MovementRecorder.State.RECORDING) MovementRecorder.stopAll(mc);
@@ -57,9 +78,10 @@ public final class Freecam {
         z = eye.z - Math.cos(yr0) * 3.0;
         place(true);
         mc.setCameraEntity(cam);
+        follow = followMode;
         active = true;
         lastNs = System.nanoTime();
-        p.sendMessage(Text.literal("Freecam: AN").formatted(Formatting.GREEN), true);
+        p.sendMessage(Text.literal(followMode ? "Verfolger-Kamera: AN" : "Freecam: AN").formatted(Formatting.GREEN), true);
     }
 
     public static void stop(MinecraftClient mc) {
@@ -67,11 +89,15 @@ public final class Freecam {
         active = false;
         cam = null;
         world = null;
+        boolean wasFollow = follow;
+        follow = false;
         if (mc.player != null) {
             mc.setCameraEntity(mc.player);
-            mc.player.setYaw(savedYaw);
-            mc.player.setPitch(savedPitch);
-            mc.player.sendMessage(Text.literal("Freecam: AUS").formatted(Formatting.RED), true);
+            if (!wasFollow) { // im Verfolger-Modus behaelt der Spieler seine Blickrichtung
+                mc.player.setYaw(savedYaw);
+                mc.player.setPitch(savedPitch);
+            }
+            mc.player.sendMessage(Text.literal(wasFollow ? "Verfolger-Kamera: AUS" : "Freecam: AUS").formatted(Formatting.RED), true);
         }
     }
 
@@ -101,7 +127,7 @@ public final class Freecam {
         if (!active) return;
         if (mc.player != null) mc.setCameraEntity(mc.player);
         boolean replay = MovementRecorder.state == MovementRecorder.State.PLAYING;
-        if (!replay) {
+        if (!replay && !follow) {
             GameOptions o = mc.options;
             o.forwardKey.setPressed(false);
             o.backKey.setPressed(false);
@@ -123,6 +149,22 @@ public final class Freecam {
         if (active && cam != null && mc.player != null && mc.world == world) mc.setCameraEntity(cam);
     }
 
+    /** Kamera haengt hinter/ueber dem Spieler; Steuerung und Blickrichtung bleiben beim Spieler. */
+    private static void updateFollow(MinecraftClient mc, ClientPlayerEntity p) {
+        ModConfig cfg = ModConfig.get();
+        double d = MathHelper.clamp(cfg.followDistance, 2, 30);
+        double h = MathHelper.clamp(cfg.followHeight, 0, 20);
+        Vec3d pos = p.getLerpedPos(BlockEsp.partial());
+        double eyeY = pos.y + (p.getEyeY() - p.getY());
+        yaw = p.getYaw();
+        double yr = Math.toRadians(yaw);
+        x = pos.x + Math.sin(yr) * d;
+        y = eyeY + h;
+        z = pos.z - Math.cos(yr) * d;
+        pitch = MathHelper.clamp(p.getPitch() + (float) Math.toDegrees(Math.atan2(h, d)), -90f, 90f);
+        place(false);
+    }
+
     /** Pro Frame und pro Tick aufrufbar (arbeitet mit echter Zeitdifferenz). */
     public static void update(MinecraftClient mc) {
         if (!active) return;
@@ -135,6 +177,10 @@ public final class Freecam {
         lastNs = now;
 
         ClientPlayerEntity p = mc.player;
+        if (follow) {
+            updateFollow(mc, p);
+            return;
+        }
         // Mausbewegung geht an die Kamera, der Spieler behaelt seine Blickrichtung.
         yaw += p.getYaw() - savedYaw;
         pitch = MathHelper.clamp(pitch + (p.getPitch() - savedPitch), -90f, 90f);

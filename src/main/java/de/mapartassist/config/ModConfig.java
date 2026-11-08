@@ -72,6 +72,9 @@ public class ModConfig {
     public int espMaxBlocks = 200;
     /** Linie von der Bildmitte zu jedem Block. */
     public boolean espTracers = false;
+    /** Verfolger-Kamera: Abstand hinter dem Spieler und Hoehe darueber (Bloecke). */
+    public int followDistance = 6;
+    public int followHeight = 2;
     /** Freecam-Geschwindigkeit in Bloecken pro Sekunde. */
     public int freecamSpeed = 8;
     /** Bewegungs-Recorder: endlos wiederholen / Anzahl Wiederholungen / Blickrichtung relativ zum Start. */
@@ -217,6 +220,8 @@ public class ModConfig {
                 loaded.espMaxBlocks = Math.max(10, Math.min(500, loaded.espMaxBlocks <= 0 ? 200 : loaded.espMaxBlocks));
                 if (loaded.progressExcluded == null) loaded.progressExcluded = new ArrayList<>();
                 if (loaded.selectedRecording == null) loaded.selectedRecording = "";
+                loaded.followDistance = Math.max(2, Math.min(30, loaded.followDistance <= 0 ? 6 : loaded.followDistance));
+                loaded.followHeight = Math.max(0, Math.min(20, loaded.followHeight));
                 loaded.freecamSpeed = Math.max(1, Math.min(40, loaded.freecamSpeed));
                 loaded.recRepeats = Math.max(1, Math.min(99, loaded.recRepeats));
                 if (loaded.customBackground == null) loaded.customBackground = "";

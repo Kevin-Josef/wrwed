@@ -29,3 +29,7 @@ SONSTIGES
 SPIELER-ESP (Menü: Spieler > Spieler-ESP)
 - Umrissbox um andere Spieler durch Wände, optional Linien (Tracer) und Name + Entfernung (unter den Füßen).
 - Reichweite 16-256 Blöcke (mehr sendet der Server dem Client meist nicht). Nur Ego-Ansicht, wie die Block-ESP.
+
+VERFOLGER-KAMERA (Menü: Extras > Freecam, rechte Karte)
+- Die Kamera folgt dir hinter/über dir (Abstand 2-30, Höhe 0-20), du steuerst und baust normal weiter ab.
+- Blickrichtung bleibt beim Spieler. Schaltet sich gegenseitig mit der normalen Freecam aus.
