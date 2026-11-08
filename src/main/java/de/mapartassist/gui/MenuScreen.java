@@ -70,7 +70,8 @@ public class MenuScreen extends Screen {
         FREECAM("Extras", "Freecam"),
         ESP("Extras", "Block-ESP"),
         ALERT("Spieler", "Spieler-Alarm"),
-        ITEMS("Spieler", "Item-Anzeige");
+        ITEMS("Spieler", "Item-Anzeige"),
+        PESP("Spieler", "Spieler-ESP");
 
         final String group, label;
         Tab(String group, String label) { this.group = group; this.label = label; }
@@ -891,6 +892,7 @@ public class MenuScreen extends Screen {
             case ESP -> buildEsp();
             case ALERT -> buildAlert();
             case ITEMS -> buildItems();
+            case PESP -> buildPlayerEsp();
         }
     }
 
@@ -912,7 +914,7 @@ public class MenuScreen extends Screen {
             new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
             new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.MINIMI}),
             new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
-            new Group("Spieler", 3, 0, new Tab[]{Tab.ALERT, Tab.ITEMS}),
+            new Group("Spieler", 3, 0, new Tab[]{Tab.ALERT, Tab.ITEMS, Tab.PESP}),
     };
     private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
@@ -945,6 +947,7 @@ public class MenuScreen extends Screen {
             case CALC -> Items.COMPARATOR;
             case ALERT -> Items.BELL;
             case ITEMS -> Items.TOTEM_OF_UNDYING;
+            case PESP -> Items.PLAYER_HEAD;
             default -> Items.PINK_DYE;
         };
     }
@@ -990,6 +993,7 @@ public class MenuScreen extends Screen {
             case SPAWNER -> c.spawnerGuard ? "AN" : "AUS";
             case ALERT -> c.alertEnabled ? "AN" : "AUS";
             case ITEMS -> c.itemHudEnabled ? "AN" : "AUS";
+            case PESP -> c.playerEspEnabled ? "AN" : "AUS";
             case MAPART -> c.autoPlace ? "AN" : "AUS";
             case RECORDER -> switch (MovementRecorder.state) {
                 case RECORDING -> "REC";
@@ -1402,6 +1406,18 @@ public class MenuScreen extends Screen {
     }
 
     // ---- Item-Anzeige
+
+    private void buildPlayerEsp() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 20, cw - 12, "Spieler-ESP aktiv",
+                () -> cfg.playerEspEnabled, v -> { cfg.playerEspEnabled = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 44, cw - 12, "Linien zu Spielern (Tracer)",
+                () -> cfg.playerEspTracers, v -> { cfg.playerEspTracers = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 68, cw - 12, "Name + Entfernung anzeigen",
+                () -> cfg.playerEspLabels, v -> { cfg.playerEspLabels = v; ModConfig.save(); }));
+        controls.add(new Sld(cx + 12, cy + 104, cw - 24, "Reichweite", " Blöcke", 16, 256,
+                () -> Math.max(16, Math.min(256, cfg.playerEspRange)), v -> cfg.playerEspRange = v));
+    }
 
     private void buildItems() {
         ModConfig cfg = ModConfig.get();
@@ -2100,6 +2116,7 @@ public class MenuScreen extends Screen {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Spieler-Alarm (/msg)");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "MSG-Verlauf");
             }
+            case PESP -> card(ctx, cx, cy - 4, cw, 194, "Spieler-ESP (Umrisse durch Wände)");
             case ITEMS -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Items (Klick = an/aus)");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Item-Anzeige");
@@ -2159,6 +2176,7 @@ public class MenuScreen extends Screen {
         if (c.spawnerGuard) on.add("Spawner-Schutz");
         if (c.alertEnabled) on.add("Spieler-Alarm");
         if (c.itemHudEnabled) on.add("Item-Anzeige");
+        if (c.playerEspEnabled) on.add("Spieler-ESP");
         if (c.espEnabled) on.add("Block-ESP");
         if (AuctionMacro.running()) on.add("Auktions-Makro");
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");

@@ -25,3 +25,7 @@ ITEM-ANZEIGE (Menü: Spieler > Item-Anzeige)
 SONSTIGES
 - Startseite: neue Gruppe "Spieler", das Fenster ist dafür etwas höher.
 - Nicht gebaut/getestet (kein Gradle hier). Bitte bauen und Fehlermeldungen schicken.
+
+SPIELER-ESP (Menü: Spieler > Spieler-ESP)
+- Umrissbox um andere Spieler durch Wände, optional Linien (Tracer) und Name + Entfernung (unter den Füßen).
+- Reichweite 16-256 Blöcke (mehr sendet der Server dem Client meist nicht). Nur Ego-Ansicht, wie die Block-ESP.

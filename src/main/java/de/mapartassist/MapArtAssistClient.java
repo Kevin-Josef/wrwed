@@ -15,6 +15,7 @@ import de.mapartassist.gui.MenuScreen;
 import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.alert.PlayerAlert;
 import de.mapartassist.hud.ItemHud;
+import de.mapartassist.esp.PlayerEsp;
 import de.mapartassist.macro.AuctionMacro;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
@@ -206,6 +207,9 @@ public class MapArtAssistClient implements ClientModInitializer {
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "block_esp"),
                 (ctx, tickCounter) -> BlockEsp.render(ctx, MinecraftClient.getInstance()));
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+                Identifier.of("mapartassist", "player_esp"),
+                (ctx, tickCounter) -> PlayerEsp.render(ctx, MinecraftClient.getInstance()));
         // Item-Anzeige (eigene Anzahl + ueber Spielernamen)
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "item_hud"),

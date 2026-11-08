@@ -46,7 +46,7 @@ public final class BlockEsp {
 
     private static final int BUDGET = 40_000;   // Rechenbudget pro Tick (leerer Abschnitt ~1-3, voller Scan 4096)
     private static final int HARD_CAP = 4_000;  // maximal gemerkte Treffer
-    private static final double NEAR = 0.05;
+    static final double NEAR = 0.05;
 
     private static Set<Block> selected = new HashSet<>();
     private static int version = 1, seenVersion = 0;
@@ -66,7 +66,7 @@ public final class BlockEsp {
     // Tick-Zeitpunkt fuer die Zwischenschritte zwischen zwei Ticks
     private static long tickNs = System.nanoTime();
     // FOV-Aufweitung beim Sprinten (wie vanilla: pro Tick halber Weg zum Ziel)
-    private static float fovMul = 1f, lastFovMul = 1f;
+    static float fovMul = 1f, lastFovMul = 1f;
 
     // wiederverwendete Hilfsfelder (keine Allokation pro Frame)
     private static final double[] PX = new double[8], PY = new double[8], PZ = new double[8];
@@ -417,7 +417,7 @@ public final class BlockEsp {
     }
 
     /** Kante mit Near-Plane-Clipping projizieren und zeichnen. true, wenn etwas sichtbar war. */
-    private static boolean edge(DrawContext g, double x0, double y0, double z0, double x1, double y1, double z1,
+    static boolean edge(DrawContext g, double x0, double y0, double z0, double x1, double y1, double z1,
                                 double midX, double midY, double kx, double ky, int sw, int sh, int color) {
         if (z0 < NEAR && z1 < NEAR) return false;
         if (z0 < NEAR) {
@@ -433,7 +433,7 @@ public final class BlockEsp {
     }
 
     /** Linie am Bildschirmrand abschneiden (Liang-Barsky) und zeichnen. */
-    private static boolean clippedLine(DrawContext g, double x0, double y0, double x1, double y1, int sw, int sh, int color) {
+    static boolean clippedLine(DrawContext g, double x0, double y0, double x1, double y1, int sw, int sh, int color) {
         double dx = x1 - x0, dy = y1 - y0;
         double t0 = 0, t1 = 1;
         double[] p = {-dx, dx, -dy, dy};

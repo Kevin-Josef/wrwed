@@ -135,6 +135,11 @@ public class ModConfig {
     public boolean spawnerGuardLeaveAfter = false;
     /** Sekunden zwischen Befehl und Verlassen (damit der Teleport ankommt). */
     public int spawnerGuardLeaveDelaySec = 3;
+    /** Spieler-ESP: Umrisse anderer Spieler durch Waende. */
+    public boolean playerEspEnabled = false;
+    public int playerEspRange = 128;
+    public boolean playerEspTracers = false;
+    public boolean playerEspLabels = true;
     /** Crystal-Limit (CrystalLimit.java): an/aus und Zeitfenster in Sekunden (1-5). */
     public boolean crystalLimit = false;
     public int crystalLimitSec = 1;
@@ -219,6 +224,7 @@ public class ModConfig {
                 loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
                 loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
+                loaded.playerEspRange = Math.max(16, Math.min(256, loaded.playerEspRange <= 0 ? 128 : loaded.playerEspRange));
                 loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 1 : loaded.crystalLimitSec));
                 if (loaded.alertTarget == null) loaded.alertTarget = "";
                 if (loaded.alertMessage == null || loaded.alertMessage.isBlank()) loaded.alertMessage = "{player}";
