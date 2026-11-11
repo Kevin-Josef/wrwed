@@ -2298,7 +2298,7 @@ public class MenuScreen extends Screen {
                 rx, cy + 92, COL - 24, 0xFFCCCCCC);
         drawWrapped(ctx, "W/A/S/D bewegen, Leertaste hoch, Shift runter, Strg schneller.",
                 rx, cy + 116, COL - 24, 0xFF777783);
-        drawWrapped(ctx, "Kamera folgt dir hinter/über dir, du spielst normal weiter (z. B. Stripminen).",
+        drawWrapped(ctx, "Kamera folgt dir hinter/über dir, du spielst normal weiter (z. B. Stripminen). Taste F8.",
                 cx + COL + 22, cy + 122, cw - COL - 34, 0xFFCCCCCC);
     }
 

@@ -63,6 +63,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     public static KeyBinding guiKey;
     public static KeyBinding spawnerKey;
     public static KeyBinding freecamKey;
+    public static KeyBinding followKey;
     public static KeyBinding espKey;
     public static KeyBinding recordKey;
     public static KeyBinding playKey;
@@ -105,6 +106,8 @@ public class MapArtAssistClient implements ClientModInitializer {
                 "key.mapartassist.spawner", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_L, CATEGORY));
         freecamKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.freecam", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F7, CATEGORY));
+        followKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.follow", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F8, CATEGORY));
         espKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.esp", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_H, CATEGORY));
         recordKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -336,6 +339,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         if (messageCooldown > 0) messageCooldown--;
 
         while (freecamKey.wasPressed()) Freecam.toggle(client);
+        while (followKey.wasPressed()) Freecam.setFollow(client, !Freecam.following());
         while (espKey.wasPressed()) {
             cfg.espEnabled = !cfg.espEnabled;
             ModConfig.save();

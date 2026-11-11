@@ -23,15 +23,12 @@ public final class PlayerEsp {
         ModConfig cfg = ModConfig.get();
         if (!cfg.playerEspEnabled || mc.world == null || mc.player == null || mc.options == null) return;
         if (mc.options.hudHidden) return;
-        if (!mc.options.getPerspective().isFirstPerson()) return;
 
-        Entity cam = mc.getCameraEntity();
-        if (cam == null) cam = mc.player;
         float pt = BlockEsp.partial();
-        Vec3d lp = cam.getLerpedPos(pt);
-        double ex = lp.x, ey = lp.y + (cam.getEyeY() - cam.getY()), ez = lp.z;
-        double yaw = Math.toRadians(cam.getYaw(pt));
-        double pitch = Math.toRadians(cam.getPitch(pt));
+        if (!CamPose.compute(mc, pt)) return;
+        double ex = CamPose.x, ey = CamPose.y, ez = CamPose.z;
+        double yaw = Math.toRadians(CamPose.yaw);
+        double pitch = Math.toRadians(CamPose.pitch);
         double sy = Math.sin(yaw), cyw = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
         double fx = -sy * cp, fy = -sp, fz = cyw * cp;
         double rx = -cyw, ry = 0, rz = -sy;

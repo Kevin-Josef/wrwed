@@ -5,6 +5,7 @@
   "key.mapartassist.combat": "Toggle HT1 Combat Lock",
   "key.mapartassist.spawner": "Toggle Spawner Guard",
   "key.mapartassist.freecam": "Toggle freecam",
+  "key.mapartassist.follow": "Toggle follow camera",
   "key.mapartassist.record": "Record movement start/stop",
   "key.mapartassist.play": "Play movement / stop",
   "key.mapartassist.esp": "Toggle Block ESP"
