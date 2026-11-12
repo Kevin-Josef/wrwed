@@ -64,6 +64,7 @@ public final class PlayerAlert {
     private static final ArrayDeque<String> queue = new ArrayDeque<>();
     private static int joinGrace = 40;
     private static int sendDelay = 0;
+    private static int statusHold = 0;
     private static boolean hooked = false;
     private static String lastLine = "";
     private static long lastLineAt = 0;
@@ -199,6 +200,8 @@ public final class PlayerAlert {
         inside.addAll(now);
 
         if (sendDelay > 0) sendDelay--;
+        if (statusHold > 0) statusHold--;
+        if (lastSent.size() > 300) lastSent.entrySet().removeIf(e -> ms - e.getValue() > cooldownMs);
         if (sendDelay <= 0 && !queue.isEmpty()) {
             String name = queue.poll();
             String text = (cfg.alertMessage == null || cfg.alertMessage.isBlank() ? "{player}" : cfg.alertMessage)
@@ -209,8 +212,9 @@ public final class PlayerAlert {
             mc.getNetworkHandler().sendChatCommand(cmd + " " + target + " " + text);
             add(true, target, text);
             status = "Gemeldet: " + name + " (an " + target + ")";
+            statusHold = 200; // Meldung ca. 10 s stehen lassen
             sendDelay = 30; // Spamschutz: hoechstens eine Nachricht pro 1,5 s
-        } else if (queue.isEmpty() && !status.startsWith("Gemeldet")) {
+        } else if (queue.isEmpty() && statusHold <= 0) {
             status = "Überwache Umgebung (" + (int) r + " Blöcke) ...";
         }
     }
