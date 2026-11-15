@@ -138,6 +138,19 @@ public class ModConfig {
     public boolean spawnerGuardLeaveAfter = false;
     /** Sekunden zwischen Befehl und Verlassen (damit der Teleport ankommt). */
     public int spawnerGuardLeaveDelaySec = 3;
+    /** Totem-Wechsel: waehlt bei Gefahr ein weiteres Totem aus der Hotbar. */
+    public boolean totemSwap = false;
+    public int totemSwapRange = 2;
+    public boolean totemSwapCrystal = true;
+    public boolean totemSwapMinecart = true;
+    public boolean totemSwapBed = true;
+    public boolean totemSwapBack = true;
+    /** Entity-ESP (Perlen, Item Frames, Armor Stands ...). */
+    public boolean entityEspEnabled = false;
+    public List<String> entityEsp = new ArrayList<>();
+    public int entityEspRange = 64;
+    public boolean entityEspTracers = false;
+    public boolean entityEspLabels = true;
     /** Spieler-ESP: Umrisse anderer Spieler durch Waende. */
     public boolean playerEspEnabled = false;
     public int playerEspRange = 128;
@@ -229,6 +242,9 @@ public class ModConfig {
                 loaded.customBgDim = Math.max(0, Math.min(90, loaded.customBgDim));
                 loaded.bgOpacity = Math.max(40, Math.min(100, loaded.bgOpacity));
                 if (loaded.sellUseManual == null) loaded.sellUseManual = new HashMap<>();
+                loaded.totemSwapRange = Math.max(1, Math.min(6, loaded.totemSwapRange <= 0 ? 2 : loaded.totemSwapRange));
+                if (loaded.entityEsp == null) loaded.entityEsp = new ArrayList<>();
+                loaded.entityEspRange = Math.max(8, Math.min(128, loaded.entityEspRange <= 0 ? 64 : loaded.entityEspRange));
                 loaded.playerEspRange = Math.max(16, Math.min(256, loaded.playerEspRange <= 0 ? 128 : loaded.playerEspRange));
                 loaded.crystalLimitSec = Math.max(1, Math.min(5, loaded.crystalLimitSec <= 0 ? 1 : loaded.crystalLimitSec));
                 if (loaded.alertTarget == null) loaded.alertTarget = "";

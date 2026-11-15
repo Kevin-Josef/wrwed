@@ -15,6 +15,8 @@ import de.mapartassist.macro.SellMacro;
 import de.mapartassist.mini.Minimi;
 import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.alert.PlayerAlert;
+import de.mapartassist.combat.TotemSwap;
+import de.mapartassist.esp.EntityEsp;
 import de.mapartassist.hud.ItemHud;
 import de.mapartassist.macro.AuctionMacro;
 import net.minecraft.block.Block;
@@ -71,7 +73,8 @@ public class MenuScreen extends Screen {
         ESP("Extras", "Block-ESP"),
         ALERT("Spieler", "Spieler-Alarm"),
         ITEMS("Spieler", "Item-Anzeige"),
-        PESP("Spieler", "Spieler-ESP");
+        PESP("Spieler", "Spieler-ESP"),
+        TOTEM("Spieler", "Totem-Wechsel");
 
         final String group, label;
         Tab(String group, String label) { this.group = group; this.label = label; }
@@ -106,6 +109,16 @@ public class MenuScreen extends Screen {
     private static int espLastSel = 0;
     // Spieler-Alarm (MSG-Verlauf) und Item-Anzeige: Scroll/Suche bleiben erhalten
     private static int alertScroll = 0;
+    // Entity-ESP (Modus der ESP-Seite)
+    private static boolean espEntityMode = false;
+    private static String eeSearch = "";
+    private static boolean eeOnly = false;
+    private static int eeScroll = 0;
+    private static List<net.minecraft.entity.EntityType<?>> eeAll = null;
+    private static List<net.minecraft.entity.EntityType<?>> eeFiltered = new ArrayList<>();
+    private static String eeLastSearch = null;
+    private static boolean eeLastOnly = false;
+    private static int eeLastSel = 0;
     private static String ihSearch = "";
     private static boolean ihOnlySelected = false;
     private static int ihScroll = 0;
@@ -893,6 +906,7 @@ public class MenuScreen extends Screen {
             case ALERT -> buildAlert();
             case ITEMS -> buildItems();
             case PESP -> buildPlayerEsp();
+            case TOTEM -> buildTotem();
         }
     }
 
@@ -914,7 +928,7 @@ public class MenuScreen extends Screen {
             new Group("Automatik", 1, -1, new Tab[]{Tab.HT1, Tab.SPAWNER, Tab.RECORDER, Tab.REPAIR}),
             new Group("Kosmetik", 2, 0, new Tab[]{Tab.CAPES, Tab.MINIMI}),
             new Group("Extras", 2, 1, new Tab[]{Tab.CALC, Tab.AFK}),
-            new Group("Spieler", 3, 0, new Tab[]{Tab.ALERT, Tab.ITEMS, Tab.PESP}),
+            new Group("Spieler", 3, 0, new Tab[]{Tab.ALERT, Tab.ITEMS, Tab.PESP, Tab.TOTEM}),
     };
     private static final int TILE_W = 144, TILE_H = 46, TILE_GAP = 10;
 
@@ -948,6 +962,7 @@ public class MenuScreen extends Screen {
             case ALERT -> Items.BELL;
             case ITEMS -> Items.TOTEM_OF_UNDYING;
             case PESP -> Items.PLAYER_HEAD;
+            case TOTEM -> Items.END_CRYSTAL;
             default -> Items.PINK_DYE;
         };
     }
@@ -994,6 +1009,7 @@ public class MenuScreen extends Screen {
             case ALERT -> c.alertEnabled ? "AN" : "AUS";
             case ITEMS -> c.itemHudEnabled ? "AN" : "AUS";
             case PESP -> c.playerEspEnabled ? "AN" : "AUS";
+            case TOTEM -> c.totemSwap ? "AN" : "AUS";
             case MAPART -> c.autoPlace ? "AN" : "AUS";
             case RECORDER -> switch (MovementRecorder.state) {
                 case RECORDING -> "REC";
@@ -1414,6 +1430,30 @@ public class MenuScreen extends Screen {
 
     // ---- Item-Anzeige
 
+    private void buildTotem() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 20, cw - 12, "Totem-Wechsel aktiv",
+                () -> cfg.totemSwap, v -> { cfg.totemSwap = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 44, cw - 12, "Gegner hält Endkristalle (alle Dimensionen)",
+                () -> cfg.totemSwapCrystal, v -> { cfg.totemSwapCrystal = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 68, cw - 12, "Gegner hält TNT-Loren (alle Dimensionen)",
+                () -> cfg.totemSwapMinecart, v -> { cfg.totemSwapMinecart = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 92, cw - 12, "Gegner hält Betten (nur Nether und End)",
+                () -> cfg.totemSwapBed, v -> { cfg.totemSwapBed = v; ModConfig.save(); }));
+        controls.add(new Tog(cx + 6, cy + 116, cw - 12, "Danach zurück auf das vorherige Item",
+                () -> cfg.totemSwapBack, v -> { cfg.totemSwapBack = v; ModConfig.save(); }));
+        controls.add(new Sld(cx + 12, cy + 148, cw - 24, "Reichweite vor mir", " Blöcke", 1, 6,
+                () -> Math.max(1, Math.min(6, cfg.totemSwapRange)), v -> cfg.totemSwapRange = v));
+    }
+
+    private void renderTotem(DrawContext ctx) {
+        String st = TotemSwap.status;
+        text(ctx, st == null || st.isEmpty()
+                        ? "Wechselt nur auf ein weiteres Totem in der Hotbar, einmal pro Gefahr."
+                        : shorten(st, 90),
+                cx, top + H - 24, st == null || st.isEmpty() ? 0xFF777783 : 0xFFFFD866);
+    }
+
     private void buildPlayerEsp() {
         ModConfig cfg = ModConfig.get();
         controls.add(new Tog(cx + 6, cy + 20, cw - 12, "Spieler-ESP aktiv",
@@ -1467,10 +1507,153 @@ public class MenuScreen extends Screen {
                 cx, top + H - 24, 0xFF777783);
     }
 
-    private void buildEsp() {
-        ModConfig cfg = ModConfig.get();
+    // ---- Entity-ESP (Modus der ESP-Seite)
 
-        TextFieldWidget sf = addField(new TextFieldWidget(textRenderer, cx + 6, cy + 20, LIST_W - 12, 16, Text.literal("Suche")));
+    private static List<net.minecraft.entity.EntityType<?>> entityPickList() {
+        if (eeAll == null) {
+            List<net.minecraft.entity.EntityType<?>> all = new ArrayList<>();
+            for (net.minecraft.entity.EntityType<?> t : Registries.ENTITY_TYPE) {
+                if (t == net.minecraft.entity.EntityType.PLAYER) continue; // eigenes Spieler-ESP
+                all.add(t);
+            }
+            all.sort(java.util.Comparator.comparing(t -> t.getName().getString()));
+            eeAll = all;
+        }
+        String q = eeSearch.trim().toLowerCase(java.util.Locale.ROOT);
+        int selHash = ModConfig.get().entityEsp.hashCode();
+        if (!q.equals(eeLastSearch) || eeOnly != eeLastOnly || selHash != eeLastSel) {
+            eeLastSearch = q;
+            eeLastOnly = eeOnly;
+            eeLastSel = selHash;
+            List<net.minecraft.entity.EntityType<?>> out = new ArrayList<>();
+            for (net.minecraft.entity.EntityType<?> t : eeAll) {
+                if (eeOnly && !EntityEsp.isSelected(t)) continue;
+                if (!q.isEmpty()) {
+                    String n = t.getName().getString().toLowerCase(java.util.Locale.ROOT);
+                    String id = Registries.ENTITY_TYPE.getId(t).getPath();
+                    if (!n.contains(q) && !id.contains(q)) continue;
+                }
+                out.add(t);
+            }
+            eeFiltered = out;
+        }
+        return eeFiltered;
+    }
+
+    /** Scrollbare Liste aller Entity-Typen (Klick = an/aus). */
+    private class EntityPickList extends Control {
+        static final int ROW = 22;
+
+        EntityPickList(int x, int y, int w, int rows) {
+            this.x = x; this.y = y; this.w = w; this.h = rows * ROW;
+        }
+
+        int rows() { return h / ROW; }
+
+        @Override
+        void draw(DrawContext ctx, int mx, int my) {
+            List<net.minecraft.entity.EntityType<?>> list = entityPickList();
+            int maxScroll = Math.max(0, list.size() - rows());
+            eeScroll = Math.max(0, Math.min(eeScroll, maxScroll));
+            int acc = Theme.accent();
+            for (int i = 0; i < rows(); i++) {
+                int idx = eeScroll + i;
+                if (idx >= list.size()) break;
+                net.minecraft.entity.EntityType<?> t = list.get(idx);
+                int ry = y + i * ROW;
+                boolean sel = EntityEsp.isSelected(t);
+                boolean hov = mx >= x && mx < x + w && my >= ry && my < ry + ROW - 2;
+                int bg = sel ? alpha(acc, hov ? 0.40f : 0.28f) : (hov ? 0xFF30303C : 0xFF262631);
+                ctx.fill(x, ry, x + w, ry + ROW - 2, bg);
+                int col = EntityEsp.colorFor(Registries.ENTITY_TYPE.getId(t).getPath());
+                ctx.fill(x + 4, ry + 5, x + 12, ry + 13, col);
+                text(ctx, shorten(t.getName().getString(), 24), x + 18, ry + 7, sel ? 0xFFFFFFFF : 0xFFC8C8D2);
+                int bx = x + w - 16;
+                outline(ctx, bx, ry + 5, 10, 10, sel ? 0xFFFFFFFF : 0xFF5A5A68);
+                if (sel) ctx.fill(bx + 2, ry + 7, bx + 8, ry + 13, acc | 0xFF000000);
+            }
+            if (list.isEmpty()) text(ctx, "Keine Treffer.", x + 6, y + 6, 0xFF999999);
+        }
+
+        @Override
+        void press(int mx, int my) {
+            List<net.minecraft.entity.EntityType<?>> list = entityPickList();
+            int i = (my - y) / ROW;
+            int idx = eeScroll + i;
+            if (i < 0 || i >= rows() || idx >= list.size()) return;
+            EntityEsp.toggle(list.get(idx));
+        }
+    }
+
+    private void buildEntityEsp() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Btn(cx + 6 + LIST_W - 12 - 66, cy + 20, 66, 16, () -> "Entities ⇄",
+                () -> { espEntityMode = false; clearAndInit(); }));
+        TextFieldWidget sf = addField(new TextFieldWidget(textRenderer, cx + 6, cy + 20, LIST_W - 12 - 70, 16, Text.literal("Suche")));
+        sf.setMaxLength(40);
+        sf.setText(eeSearch);
+        sf.setChangedListener(t -> { eeSearch = t; eeScroll = 0; });
+
+        controls.add(new EntityPickList(cx + 6, cy + 40, LIST_W - 12, 6));
+        int by = cy + 174;
+        controls.add(new Btn(cx + 6, by, 30, 14, () -> "▲▲", () -> eeScroll = Math.max(0, eeScroll - 6)));
+        controls.add(new Btn(cx + 38, by, 30, 14, () -> "▲", () -> eeScroll = Math.max(0, eeScroll - 1)));
+        controls.add(new Btn(cx + 70, by, 30, 14, () -> "▼", () -> eeScroll++));
+        controls.add(new Btn(cx + 102, by, 30, 14, () -> "▼▼", () -> eeScroll += 6));
+        controls.add(new Btn(cx + 138, by, LIST_W - 12 - 132, 14,
+                () -> eeOnly ? "Alle Typen" : "Nur Auswahl",
+                () -> { eeOnly = !eeOnly; eeScroll = 0; }));
+
+        int rx = cx + LIST_W + 20, rw = cx + cw - rx - 10;
+        controls.add(new Tog(rx - 6, cy + 22, rw + 12, "Entity-ESP aktiv",
+                () -> cfg.entityEspEnabled, v -> { cfg.entityEspEnabled = v; ModConfig.save(); }));
+        controls.add(new Tog(rx - 6, cy + 46, rw + 12, "Tracer zur Bildmitte",
+                () -> cfg.entityEspTracers, v -> { cfg.entityEspTracers = v; ModConfig.save(); }));
+        controls.add(new Tog(rx - 6, cy + 70, rw + 12, "Name + Entfernung",
+                () -> cfg.entityEspLabels, v -> { cfg.entityEspLabels = v; ModConfig.save(); }));
+        controls.add(new Sld(rx, cy + 100, rw, "Reichweite", " Blöcke", 8, 128,
+                () -> Math.max(8, Math.min(128, cfg.entityEspRange)), v -> cfg.entityEspRange = v));
+
+        int hw = (rw - 4) / 2;
+        controls.add(new Btn(rx, cy + 132, hw, 18, () -> "Perlen", () -> {
+            int n = EntityEsp.addAll("minecraft:ender_pearl");
+            espStatus = n > 0 ? "Enderperlen hinzugefügt." : "Schon gewählt.";
+        }));
+        controls.add(new Btn(rx + hw + 4, cy + 132, hw, 18, () -> "Rahmen/Ständer", () -> {
+            int n = EntityEsp.addAll("minecraft:item_frame", "minecraft:glow_item_frame", "minecraft:armor_stand");
+            espStatus = n > 0 ? n + " Typen hinzugefügt." : "Schon gewählt.";
+        }));
+        controls.add(new Btn(rx, cy + 154, hw, 18, () -> "Kristalle/TNT", () -> {
+            int n = EntityEsp.addAll("minecraft:end_crystal", "minecraft:tnt", "minecraft:tnt_minecart");
+            espStatus = n > 0 ? n + " Typen hinzugefügt." : "Schon gewählt.";
+        }));
+        controls.add(new Btn(rx + hw + 4, cy + 154, hw, 18, () -> "Alle abwählen", () -> {
+            EntityEsp.clear();
+            espStatus = "Auswahl geleert.";
+        }).enabledIf(() -> !cfg.entityEsp.isEmpty()));
+    }
+
+    private void renderEntityEsp(DrawContext ctx) {
+        ModConfig cfg = ModConfig.get();
+        int rx = cx + LIST_W + 20;
+        text(ctx, cfg.entityEsp.isEmpty() ? "Noch keine Entities gewählt." : "Gewählt: " + cfg.entityEsp.size(),
+                rx, cy + 182, 0xFF9A9AA8);
+        String st = espStatus;
+        boolean has = st != null && !st.isEmpty();
+        text(ctx, has ? st : "Perlen in Stasis siehst du nur, solange der Chunk geladen ist.",
+                cx, top + H - 24, has ? 0xFFFFD866 : 0xFF777783);
+    }
+
+    private void buildEsp() {
+        if (espEntityMode) {
+            buildEntityEsp();
+            return;
+        }
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Btn(cx + 6 + LIST_W - 12 - 66, cy + 20, 66, 16, () -> "Blöcke ⇄",
+                () -> { espEntityMode = true; clearAndInit(); }));
+
+        TextFieldWidget sf = addField(new TextFieldWidget(textRenderer, cx + 6, cy + 20, LIST_W - 12 - 70, 16, Text.literal("Suche")));
         sf.setMaxLength(40);
         sf.setText(espSearch);
         sf.setChangedListener(t -> { espSearch = t; espScroll = 0; });
@@ -1521,6 +1704,10 @@ public class MenuScreen extends Screen {
     }
 
     private void renderEsp(DrawContext ctx) {
+        if (espEntityMode) {
+            renderEntityEsp(ctx);
+            return;
+        }
         ModConfig cfg = ModConfig.get();
         int rx = cx + LIST_W + 20;
         String info = cfg.espBlocks.isEmpty()
@@ -2074,8 +2261,8 @@ public class MenuScreen extends Screen {
                 card(ctx, cx + COL + 10, cy - 4, cw - COL - 10, 158, "Verfolger-Kamera");
             }
             case ESP -> {
-                card(ctx, cx, cy - 4, LIST_W, 194, "Blöcke (Klick = an/aus)");
-                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Block-ESP");
+                card(ctx, cx, cy - 4, LIST_W, 194, espEntityMode ? "Entities (Klick = an/aus)" : "Blöcke (Klick = an/aus)");
+                card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, espEntityMode ? "Entity-ESP" : "Block-ESP");
             }
             case MINIMI -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Skins");
@@ -2127,6 +2314,7 @@ public class MenuScreen extends Screen {
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "MSG-Verlauf");
             }
             case PESP -> card(ctx, cx, cy - 4, cw, 194, "Spieler-ESP (Umrisse durch Wände)");
+            case TOTEM -> card(ctx, cx, cy - 4, cw, 194, "Totem-Wechsel (Gegner vor dir hält Gefahr-Item)");
             case ITEMS -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Items (Klick = an/aus)");
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "Item-Anzeige");
@@ -2164,6 +2352,7 @@ public class MenuScreen extends Screen {
             case HOME -> renderHome(ctx);
             case FREECAM -> renderFreecam(ctx);
             case ESP -> renderEsp(ctx);
+            case TOTEM -> renderTotem(ctx);
             case ALERT -> renderAlert(ctx);
             case ITEMS -> renderItems(ctx);
         }
@@ -2187,6 +2376,7 @@ public class MenuScreen extends Screen {
         if (c.alertEnabled) on.add("Spieler-Alarm");
         if (c.itemHudEnabled) on.add("Item-Anzeige");
         if (c.playerEspEnabled) on.add("Spieler-ESP");
+        if (c.totemSwap) on.add("Totem-Wechsel");
         if (c.espEnabled) on.add("Block-ESP");
         if (AuctionMacro.running()) on.add("Auktions-Makro");
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");

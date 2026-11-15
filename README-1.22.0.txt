@@ -37,3 +37,12 @@ VERFOLGER-KAMERA (Menü: Extras > Freecam, rechte Karte)
 - Verfolger-Kamera hat eine eigene Taste (Standard F8, unter Steuerung > MapArtAssist änderbar).
 - Block-ESP, Spieler-ESP und Item-Anzeige über Spielern funktionieren jetzt auch in F5 (Third Person hinten/vorn),
   mit der gleichen Wand-Kollision der Kamera wie Vanilla.
+
+TOTEM-WECHSEL (Menü: Spieler > Totem-Wechsel)
+- Hält ein Spieler direkt vor dir (Reichweite 1-6 Blöcke, Standard 2) Endkristalle oder TNT-Loren (jede Dimension)
+  oder Betten (nur Nether/End), wählt die Mod ein weiteres Totem aus deiner Hotbar aus (falls vorhanden).
+- Nur einmal pro Gefahr, damit du danach selbst umschalten kannst. Optional zurück aufs vorherige Item nach 1 s Ruhe.
+
+ENTITY-ESP (Menü: Extras > Block-ESP, Knopf oben links "Blöcke ⇄ Entities")
+- Eigene Liste für Entity-Typen: Enderperlen (Pearl-Stasis), Item Frames, Armor Stands, Endkristalle, TNT ...
+- Schnellauswahl-Knöpfe, Tracer, Name + Entfernung, Reichweite. Funktioniert auch in F5.

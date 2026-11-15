@@ -16,6 +16,8 @@ import de.mapartassist.guard.SpawnerGuard;
 import de.mapartassist.alert.PlayerAlert;
 import de.mapartassist.hud.ItemHud;
 import de.mapartassist.esp.PlayerEsp;
+import de.mapartassist.esp.EntityEsp;
+import de.mapartassist.combat.TotemSwap;
 import de.mapartassist.macro.AuctionMacro;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
@@ -134,6 +136,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(SpawnerGuard::tick);
         ClientTickEvents.END_CLIENT_TICK.register(BlockEsp::tick);
         ClientTickEvents.END_CLIENT_TICK.register(PlayerAlert::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(TotemSwap::tick);
         PlayerAlert.init();
         // /sellmacro = /sell-Makro, /repairmacro = Auto-Reparatur (Test). Die Server-Befehle /sell und /shop bleiben frei.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
@@ -213,6 +216,9 @@ public class MapArtAssistClient implements ClientModInitializer {
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "player_esp"),
                 (ctx, tickCounter) -> PlayerEsp.render(ctx, MinecraftClient.getInstance()));
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+                Identifier.of("mapartassist", "entity_esp"),
+                (ctx, tickCounter) -> EntityEsp.render(ctx, MinecraftClient.getInstance()));
         // Item-Anzeige (eigene Anzahl + ueber Spielernamen)
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "item_hud"),
