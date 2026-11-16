@@ -196,6 +196,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
                 Identifier.of("mapartassist", "frame_placer"),
                 (ctx, tickCounter) -> {
+                    de.mapartassist.esp.CamPose.nextFrame();
                     onFrame(MinecraftClient.getInstance());
                     CombatLock.check(MinecraftClient.getInstance());
                     Freecam.update(MinecraftClient.getInstance());

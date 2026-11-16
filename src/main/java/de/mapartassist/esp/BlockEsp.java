@@ -309,9 +309,7 @@ public final class BlockEsp {
         double rx = -cyw, ry = 0, rz = -sy;
         double ux = -sy * sp, uy = cp, uz = cyw * sp;
 
-        float fovMulNow = lastFovMul + (fovMul - lastFovMul) * pt;
-        double fov = mc.options.getFov().getValue() * fovMulNow;
-        double tanHalf = Math.tan(Math.toRadians(fov) / 2.0);
+        double tanHalf = CamPose.tanHalf(mc, pt);
 
         int sw = mc.getWindow().getScaledWidth(), sh = mc.getWindow().getScaledHeight();
         double aspect = mc.getWindow().getFramebufferWidth() / (double) Math.max(1, mc.getWindow().getFramebufferHeight());
@@ -352,10 +350,10 @@ public final class BlockEsp {
             boolean any = false;
             if (centerVisible && size < 5.0) {
                 // weit weg: kleiner Punkt statt Umriss
-                int px = (int) Math.round(midX + mxc * kx / zc);
-                int py = (int) Math.round(midY - myc * ky / zc);
+                double px = midX + mxc * kx / zc;
+                double py = midY - myc * ky / zc;
                 if (px >= -4 && px <= sw + 4 && py >= -4 && py <= sh + 4) {
-                    g.fill(px - 1, py - 1, px + 2, py + 2, h.color);
+                    EspDraw.dot(g, px, py, h.color);
                     any = true;
                 }
             } else {
@@ -392,9 +390,7 @@ public final class BlockEsp {
         double fx = -sy * cp, fy = -sp, fz = cyw * cp;
         double rx = -cyw, ry = 0, rz = -sy;
         double ux = -sy * sp, uy = cp, uz = cyw * sp;
-        float fovMulNow = lastFovMul + (fovMul - lastFovMul) * pt;
-        double fov = mc.options.getFov().getValue() * fovMulNow;
-        double tanHalf = Math.tan(Math.toRadians(fov) / 2.0);
+        double tanHalf = CamPose.tanHalf(mc, pt);
         int sw = mc.getWindow().getScaledWidth(), sh = mc.getWindow().getScaledHeight();
         double aspect = mc.getWindow().getFramebufferWidth() / (double) Math.max(1, mc.getWindow().getFramebufferHeight());
         double kx = (sw / 2.0) / (tanHalf * aspect);
@@ -440,40 +436,7 @@ public final class BlockEsp {
                 else { if (r < t0) return false; if (r < t1) t1 = r; }
             }
         }
-        int ax = (int) Math.round(x0 + dx * t0), ay = (int) Math.round(y0 + dy * t0);
-        int bx = (int) Math.round(x0 + dx * t1), by = (int) Math.round(y0 + dy * t1);
-        line(g, ax, ay, bx, by, color);
+        EspDraw.line(g, x0 + dx * t0, y0 + dy * t0, x0 + dx * t1, y0 + dy * t1, color);
         return true;
-    }
-
-    /** 1-Pixel-Linie aus waagerechten bzw. senkrechten Laeufen (wenig fill-Aufrufe). */
-    private static void line(DrawContext g, int x0, int y0, int x1, int y1, int c) {
-        int dx = x1 - x0, dy = y1 - y0;
-        if (dx == 0 && dy == 0) { g.fill(x0, y0, x0 + 1, y0 + 1, c); return; }
-        if (Math.abs(dx) >= Math.abs(dy)) {
-            if (x0 > x1) { int t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
-            double m = (double) (y1 - y0) / (x1 - x0);
-            int runStart = x0, runY = y0;
-            for (int x = x0 + 1; x <= x1; x++) {
-                int y = (int) Math.round(y0 + (x - x0) * m);
-                if (y != runY) {
-                    g.fill(runStart, runY, x, runY + 1, c);
-                    runStart = x; runY = y;
-                }
-            }
-            g.fill(runStart, runY, x1 + 1, runY + 1, c);
-        } else {
-            if (y0 > y1) { int t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
-            double m = (double) (x1 - x0) / (y1 - y0);
-            int runStart = y0, runX = x0;
-            for (int y = y0 + 1; y <= y1; y++) {
-                int x = (int) Math.round(x0 + (y - y0) * m);
-                if (x != runX) {
-                    g.fill(runX, runStart, runX + 1, y, c);
-                    runStart = y; runX = x;
-                }
-            }
-            g.fill(runX, runStart, runX + 1, y1 + 1, c);
-        }
     }
 }

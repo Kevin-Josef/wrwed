@@ -10,7 +10,7 @@ import net.minecraft.util.math.Vec3d;
 
 /**
  * Spieler-ESP: Umrissbox, optional Linie (Tracer) und Name + Entfernung fuer andere Spieler.
- * Gleiche HUD-Projektion wie die Block-ESP, nur in der Ego-Ansicht.
+ * Gleiche HUD-Projektion wie die Block-ESP. Tracer + Label funktionieren rundum (360 Grad), auch hinter dir.
  */
 public final class PlayerEsp {
     private PlayerEsp() {}
@@ -33,9 +33,7 @@ public final class PlayerEsp {
         double fx = -sy * cp, fy = -sp, fz = cyw * cp;
         double rx = -cyw, ry = 0, rz = -sy;
         double ux = -sy * sp, uy = cp, uz = cyw * sp;
-        float fovMulNow = BlockEsp.lastFovMul + (BlockEsp.fovMul - BlockEsp.lastFovMul) * pt;
-        double fov = mc.options.getFov().getValue() * fovMulNow;
-        double tanHalf = Math.tan(Math.toRadians(fov) / 2.0);
+        double tanHalf = CamPose.tanHalf(mc, pt);
         int sw = mc.getWindow().getScaledWidth(), sh = mc.getWindow().getScaledHeight();
         double aspect = mc.getWindow().getFramebufferWidth() / (double) Math.max(1, mc.getWindow().getFramebufferHeight());
         double kx = (sw / 2.0) / (tanHalf * aspect);
@@ -52,7 +50,6 @@ public final class PlayerEsp {
             if (dx * dx + dy * dy + dz * dz > range2) continue;
             double hw = o.getWidth() / 2.0, h = o.getHeight();
             double zc = (dx * fx + (dy + h / 2) * fy + dz * fz);
-            if (zc < -2.0) continue; // komplett hinter der Kamera
 
             for (int c = 0; c < 8; c++) {
                 double ax = pos.x + ((c & 1) == 0 ? -hw : hw) - ex;
@@ -72,10 +69,10 @@ public final class PlayerEsp {
 
             boolean any = false;
             if (centerVisible && sizePx < 6.0) {
-                int px = (int) Math.round(midX + mx * kx / mz);
-                int py = (int) Math.round(midY - my * ky / mz);
+                double px = midX + mx * kx / mz;
+                double py = midY - my * ky / mz;
                 if (px >= -4 && px <= sw + 4 && py >= -4 && py <= sh + 4) {
-                    g.fill(px - 1, py - 1, px + 2, py + 2, COLOR);
+                    EspDraw.dot(g, px, py, COLOR);
                     any = true;
                 }
             } else {
@@ -88,9 +85,23 @@ public final class PlayerEsp {
                     }
                 }
             }
-            if (cfg.playerEspTracers && centerVisible) {
-                double tx = midX + mx * kx / mz, ty = midY - my * ky / mz;
-                BlockEsp.clippedLine(g, midX, midY, tx, ty, sw, sh, (COLOR & 0xFFFFFF) | 0x99000000);
+            // Bildschirmrichtung zum Spieler (auch wenn er hinter dir steht): Strahl vom Bildschirmmittelpunkt
+            double bdx = 0, bdy = 1, bLen = 0;
+            if (!centerVisible) {
+                bdx = mx; bdy = -my;
+                bLen = Math.sqrt(bdx * bdx + bdy * bdy);
+                if (bLen < 1e-6) { bdx = 0; bdy = 1; } else { bdx /= bLen; bdy /= bLen; }
+            }
+            if (cfg.playerEspTracers) {
+                int tc = (COLOR & 0xFFFFFF) | 0x99000000;
+                if (centerVisible) {
+                    double tx = midX + mx * kx / mz, ty = midY - my * ky / mz;
+                    BlockEsp.clippedLine(g, midX, midY, tx, ty, sw, sh, tc);
+                } else {
+                    // hinter der Kamera: Strahl zeigt in die Richtung (links/rechts/oben/unten), in der der Spieler steht
+                    double far = Math.max(sw, sh);
+                    BlockEsp.clippedLine(g, midX, midY, midX + bdx * far, midY + bdy * far, sw, sh, tc);
+                }
                 any = true;
             }
             if (cfg.playerEspLabels && centerVisible) {
@@ -107,6 +118,18 @@ public final class PlayerEsp {
                         any = true;
                     }
                 }
+            
+            } else if (cfg.playerEspLabels) {
+                // Spieler hinter dir: Name + Entfernung am Ende des Strahls am Bildschirmrand
+                double tMax = Double.MAX_VALUE;
+                double mxEdge = sw / 2.0 - 40, myEdge = sh / 2.0 - 14;
+                if (Math.abs(bdx) > 1e-6) tMax = Math.min(tMax, mxEdge / Math.abs(bdx));
+                if (Math.abs(bdy) > 1e-6) tMax = Math.min(tMax, myEdge / Math.abs(bdy));
+                int lx = (int) Math.round(midX + bdx * tMax);
+                int ly = (int) Math.round(midY + bdy * tMax);
+                String t = o.getName().getString() + " " + Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)) + "m";
+                g.drawTextWithShadow(mc.textRenderer, t, lx - mc.textRenderer.getWidth(t) / 2, ly - 4, 0xFFFFFFFF);
+                any = true;
             }
             if (any) drawn++;
         }

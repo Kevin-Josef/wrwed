@@ -92,9 +92,7 @@ public final class EntityEsp {
         double fx = -sy * cp, fy = -sp, fz = cyw * cp;
         double rx = -cyw, ry = 0, rz = -sy;
         double ux = -sy * sp, uy = cp, uz = cyw * sp;
-        float fovMulNow = BlockEsp.lastFovMul + (BlockEsp.fovMul - BlockEsp.lastFovMul) * pt;
-        double fov = mc.options.getFov().getValue() * fovMulNow;
-        double tanHalf = Math.tan(Math.toRadians(fov) / 2.0);
+        double tanHalf = CamPose.tanHalf(mc, pt);
         int sw = mc.getWindow().getScaledWidth(), sh = mc.getWindow().getScaledHeight();
         double aspect = mc.getWindow().getFramebufferWidth() / (double) Math.max(1, mc.getWindow().getFramebufferHeight());
         double kx = (sw / 2.0) / (tanHalf * aspect);
@@ -135,10 +133,10 @@ public final class EntityEsp {
 
             boolean any = false;
             if (centerVisible && sizePx < 6.0) {
-                int px = (int) Math.round(midX + mx * kx / mz);
-                int py = (int) Math.round(midY - my * ky / mz);
+                double px = midX + mx * kx / mz;
+                double py = midY - my * ky / mz;
                 if (px >= -4 && px <= sw + 4 && py >= -4 && py <= sh + 4) {
-                    g.fill(px - 1, py - 1, px + 2, py + 2, color);
+                    EspDraw.dot(g, px, py, color);
                     any = true;
                 }
             } else {
