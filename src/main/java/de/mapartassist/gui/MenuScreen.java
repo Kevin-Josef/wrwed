@@ -9,6 +9,7 @@ import de.mapartassist.esp.BlockEsp;
 import de.mapartassist.config.ModConfig;
 import de.mapartassist.litematica.SchematicProgress;
 import de.mapartassist.macro.AfkGuard;
+import de.mapartassist.macro.AutoRtp;
 import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.macro.SellMacro;
@@ -71,6 +72,7 @@ public class MenuScreen extends Screen {
         SETTINGS(null, "Design"),
         FREECAM("Extras", "Freecam"),
         ESP("Extras", "Block-ESP"),
+        RTP("Extras", "Auto-RTP"),
         ALERT("Spieler", "Spieler-Alarm"),
         ITEMS("Spieler", "Item-Anzeige"),
         PESP("Spieler", "Spieler-ESP"),
@@ -281,7 +283,7 @@ public class MenuScreen extends Screen {
 
     /** Kleiner Icon-Knopf oben rechts (Design). */
     private class IconBtn extends Control {
-        final int kind; // 0 = Design, 1 = Freecam, 2 = Block-ESP
+        final int kind; // 0 = Design, 1 = Freecam, 2 = Block-ESP, 3 = Auto-RTP
         final String tip;
         final BooleanSupplier on;
         final Runnable run;
@@ -306,6 +308,10 @@ public class MenuScreen extends Screen {
                     ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
                     ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, sel ? 0xFFFFFFFF : acc);
                 }
+            } else if (kind == 3) {
+                // Portal (Auto-RTP)
+                outline(ctx, x + 5, y + 3, 8, 12, lc);
+                ctx.fill(x + 7, y + 5, x + 11, y + 13, sel ? 0xFFFFFFFF : acc);
             } else if (kind == 2) {
                 // Wuerfel-Umriss (Block-ESP)
                 outline(ctx, x + 4, y + 4, 10, 10, lc);
@@ -874,6 +880,8 @@ public class MenuScreen extends Screen {
         titleField = null;
         fields.clear();
 
+        controls.add(new IconBtn(left + W - 94, top + 12, 3, "Auto-RTP", () -> activeTab == Tab.RTP || AutoRtp.running(), () ->
+                openTab(activeTab == Tab.RTP ? Tab.HOME : Tab.RTP)));
         controls.add(new IconBtn(left + W - 72, top + 12, 2, "Block-ESP", () -> activeTab == Tab.ESP || ModConfig.get().espEnabled, () ->
                 openTab(activeTab == Tab.ESP ? Tab.HOME : Tab.ESP)));
         controls.add(new IconBtn(left + W - 50, top + 12, 1, "Freecam", () -> activeTab == Tab.FREECAM || Freecam.active(), () ->
@@ -906,6 +914,7 @@ public class MenuScreen extends Screen {
             case ALERT -> buildAlert();
             case ITEMS -> buildItems();
             case PESP -> buildPlayerEsp();
+            case RTP -> buildRtp();
             case TOTEM -> buildTotem();
         }
     }
@@ -1452,6 +1461,31 @@ public class MenuScreen extends Screen {
                         ? "Wechselt nur auf ein weiteres Totem in der Hotbar, einmal pro Gefahr."
                         : shorten(st, 90),
                 cx, top + H - 24, st == null || st.isEmpty() ? 0xFF777783 : 0xFFFFD866);
+    }
+
+    private void buildRtp() {
+        ModConfig cfg = ModConfig.get();
+        controls.add(new Tog(cx + 6, cy + 20, cw - 12, "Auto-RTP läuft",
+                () -> AutoRtp.running(), v -> { AutoRtp.set(client, v); if (v) client.setScreen(null); }));
+        int bw = (cw - 20 - 12) / 3;
+        String[] names = {"Overworld", "Nether", "End"};
+        for (int i = 0; i < 3; i++) {
+            final int dim = i;
+            controls.add(new Btn(cx + 10 + i * (bw + 6), cy + 52, bw, 20,
+                    () -> (cfg.rtpDimension == dim ? "● " : "") + names[dim],
+                    () -> { cfg.rtpDimension = dim; ModConfig.save(); }));
+        }
+        controls.add(new Sld(cx + 12, cy + 88, cw - 24, "Warten nach Teleport (Spieler suchen)", " s", 1, 15,
+                () -> Math.max(1, Math.min(15, cfg.rtpWaitSec)), v -> cfg.rtpWaitSec = v));
+        controls.add(new Sld(cx + 12, cy + 118, cw - 24, "Pause nach Fehlversuch", " s", 1, 60,
+                () -> Math.max(1, Math.min(60, cfg.rtpRetrySec)), v -> cfg.rtpRetrySec = v));
+    }
+
+    private void renderRtp(DrawContext ctx) {
+        drawWrapped(ctx, "Sendet /rtp, klickt im Menü die gewählte Dimension an und wiederholt das, bis nach einem Teleport ein Spieler in Reichweite des Spieler-ESP (Reichweite dort einstellbar) auftaucht. Dann stoppt es.",
+                cx + 12, cy + 148, cw - 24, 0xFF777783);
+        String st = AutoRtp.status;
+        text(ctx, st == null ? "" : shorten(st, 90), cx, top + H - 24, 0xFFFFD866);
     }
 
     private void buildPlayerEsp() {
@@ -2314,6 +2348,7 @@ public class MenuScreen extends Screen {
                 card(ctx, cx + LIST_W + 10, cy - 4, cw - LIST_W - 10, 194, "MSG-Verlauf");
             }
             case PESP -> card(ctx, cx, cy - 4, cw, 194, "Spieler-ESP (Umrisse durch Wände)");
+            case RTP -> card(ctx, cx, cy - 4, cw, 194, "Auto-RTP (/rtp, bis ein Spieler in Reichweite ist)");
             case TOTEM -> card(ctx, cx, cy - 4, cw, 194, "Totem-Wechsel (Gegner vor dir hält Gefahr-Item)");
             case ITEMS -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Items (Klick = an/aus)");
@@ -2354,6 +2389,7 @@ public class MenuScreen extends Screen {
             case ESP -> renderEsp(ctx);
             case TOTEM -> renderTotem(ctx);
             case ALERT -> renderAlert(ctx);
+            case RTP -> renderRtp(ctx);
             case ITEMS -> renderItems(ctx);
         }
     }
@@ -2379,6 +2415,7 @@ public class MenuScreen extends Screen {
         if (c.totemSwap) on.add("Totem-Wechsel");
         if (c.espEnabled) on.add("Block-ESP");
         if (AuctionMacro.running()) on.add("Auktions-Makro");
+        if (AutoRtp.running()) on.add("Auto-RTP");
         if (MovementRecorder.state == MovementRecorder.State.PLAYING) on.add("Recorder");
         text(ctx, on.isEmpty() ? "Nichts aktiv." : "Aktiv: " + String.join(", ", on),
                 left + 14, top + H - 24, on.isEmpty() ? 0xFF777783 : 0xFF66DD99);

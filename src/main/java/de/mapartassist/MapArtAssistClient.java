@@ -6,6 +6,7 @@ import de.mapartassist.combat.ShieldBreaker;
 import de.mapartassist.esp.BlockEsp;
 import de.mapartassist.litematica.SchematicProgress;
 import de.mapartassist.macro.AfkGuard;
+import de.mapartassist.macro.AutoRtp;
 import de.mapartassist.mini.Minimi;
 import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
@@ -69,6 +70,7 @@ public class MapArtAssistClient implements ClientModInitializer {
     public static KeyBinding espKey;
     public static KeyBinding recordKey;
     public static KeyBinding playKey;
+    public static KeyBinding rtpKey;
     private static final KeyBinding.Category CATEGORY =
             KeyBinding.Category.create(Identifier.of("mapartassist", "main"));
 
@@ -116,6 +118,8 @@ public class MapArtAssistClient implements ClientModInitializer {
                 "key.mapartassist.record", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_1, CATEGORY));
         playKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.play", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_2, CATEGORY));
+        rtpKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.mapartassist.rtp", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_KP_3, CATEGORY));
         guiKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.mapartassist.gui", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, CATEGORY));
         // The guard runs BEFORE vanilla processes input for the tick, i.e. right before
@@ -130,6 +134,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(AuctionMacro::tick);
         ClientTickEvents.END_CLIENT_TICK.register(SellMacro::tick);
         ClientTickEvents.END_CLIENT_TICK.register(AfkGuard::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(AutoRtp::tick);
         ClientTickEvents.END_CLIENT_TICK.register(Minimi::tick);
         ClientTickEvents.END_CLIENT_TICK.register(AutoRepair::tick);
         ClientTickEvents.END_CLIENT_TICK.register(CombatLock::check);
@@ -147,6 +152,20 @@ public class MapArtAssistClient implements ClientModInitializer {
                     .executes(c -> { AutoRepair.start(true); return 1; })
                     .then(ClientCommandManager.literal("stop").executes(c -> { AutoRepair.stop(); return 1; })));
         });
+        // /rtpmacro [overworld|nether|end] = Auto-RTP starten, /rtpmacro stop = stoppen (bewusst NICHT /rtp)
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
+                dispatcher.register(ClientCommandManager.literal("rtpmacro")
+                        .executes(c -> { AutoRtp.start(MinecraftClient.getInstance()); return 1; })
+                        .then(ClientCommandManager.literal("stop").executes(c -> { AutoRtp.stop(); return 1; }))
+                        .then(ClientCommandManager.literal("overworld").executes(c -> {
+                            ModConfig.get().rtpDimension = 0; ModConfig.save();
+                            AutoRtp.start(MinecraftClient.getInstance()); return 1; }))
+                        .then(ClientCommandManager.literal("nether").executes(c -> {
+                            ModConfig.get().rtpDimension = 1; ModConfig.save();
+                            AutoRtp.start(MinecraftClient.getInstance()); return 1; }))
+                        .then(ClientCommandManager.literal("end").executes(c -> {
+                            ModConfig.get().rtpDimension = 2; ModConfig.save();
+                            AutoRtp.start(MinecraftClient.getInstance()); return 1; }))));
         // /ahmacro = Auktions-Makro (bewusst NICHT /ah, damit /ah und /ah sell des Servers normal funktionieren)
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 dispatcher.register(ClientCommandManager.literal("ahmacro")
@@ -358,6 +377,7 @@ public class MapArtAssistClient implements ClientModInitializer {
         }
         while (recordKey.wasPressed()) MovementRecorder.toggleRecord(client);
         while (playKey.wasPressed()) MovementRecorder.togglePlay(client);
+        while (rtpKey.wasPressed()) AutoRtp.toggle(client);
         while (guiKey.wasPressed()) client.setScreen(new MenuScreen(null));
         while (combatKey.wasPressed()) {
             cfg.combatLock = !cfg.combatLock;

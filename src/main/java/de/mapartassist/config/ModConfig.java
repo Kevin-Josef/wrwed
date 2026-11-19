@@ -171,6 +171,10 @@ public class ModConfig {
     public int alertRadius = 50;
     /** Pause in Sekunden, bevor derselbe Spieler erneut gemeldet wird. */
     public int alertCooldownSec = 60;
+    /** Auto-RTP: Dimension im RTP-Menue (0 Overworld, 1 Nether, 2 End), Wartezeit nach Teleport und nach Fehlversuch (Sekunden). */
+    public int rtpDimension = 0;
+    public int rtpWaitSec = 4;
+    public int rtpRetrySec = 5;
     /** Item-Anzeige: Anzahl ausgewaehlter Items als HUD und ueber Spielernamen. */
     public boolean itemHudEnabled = false;
     public List<String> itemHudItems = new ArrayList<>();
@@ -252,6 +256,9 @@ public class ModConfig {
                 if (loaded.alertCommand == null || loaded.alertCommand.isBlank()) loaded.alertCommand = "msg";
                 loaded.alertRadius = Math.max(10, Math.min(256, loaded.alertRadius <= 0 ? 50 : loaded.alertRadius));
                 loaded.alertCooldownSec = Math.max(5, Math.min(600, loaded.alertCooldownSec <= 0 ? 60 : loaded.alertCooldownSec));
+                loaded.rtpDimension = Math.max(0, Math.min(2, loaded.rtpDimension));
+                loaded.rtpWaitSec = Math.max(1, Math.min(15, loaded.rtpWaitSec <= 0 ? 4 : loaded.rtpWaitSec));
+                loaded.rtpRetrySec = Math.max(1, Math.min(60, loaded.rtpRetrySec <= 0 ? 5 : loaded.rtpRetrySec));
                 if (loaded.itemHudItems == null) loaded.itemHudItems = new ArrayList<>();
                 loaded.itemHudX = Math.max(0, Math.min(95, loaded.itemHudX));
                 loaded.itemHudY = Math.max(0, Math.min(95, loaded.itemHudY));

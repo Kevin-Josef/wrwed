@@ -8,5 +8,6 @@
   "key.mapartassist.follow": "Toggle follow camera",
   "key.mapartassist.record": "Record movement start/stop",
   "key.mapartassist.play": "Play movement / stop",
-  "key.mapartassist.esp": "Toggle Block ESP"
+  "key.mapartassist.esp": "Toggle Block ESP",
+  "key.mapartassist.rtp": "Auto-RTP on/off"
 }

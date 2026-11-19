@@ -8,5 +8,6 @@
   "key.mapartassist.follow": "Verfolger-Kamera an/aus",
   "key.mapartassist.record": "Bewegung aufnehmen Start/Stopp",
   "key.mapartassist.play": "Bewegung abspielen/Stopp",
-  "key.mapartassist.esp": "Block-ESP an/aus"
+  "key.mapartassist.esp": "Block-ESP an/aus",
+  "key.mapartassist.rtp": "Auto-RTP an/aus"
 }
