@@ -4,6 +4,14 @@ import de.mapartassist.config.ModConfig;
 import de.mapartassist.mini.Minimi;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.PotionContentsComponent;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.item.Items;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.Hand;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
@@ -32,7 +40,7 @@ import java.util.Locale;
 public final class AutoRtp {
     private AutoRtp() {}
 
-    private enum State { IDLE, SEND, WAIT_MENU, WAIT_TP, SCAN, DELAY }
+    private enum State { IDLE, SEND, WAIT_MENU, WAIT_TP, SCAN, DELAY, POP }
 
     private static final int MAX_FAILS_IN_ROW = 12;
 
@@ -42,6 +50,69 @@ public final class AutoRtp {
     private static ClientWorld startWorld;
     private static double sx, sy, sz;
     public static String status = "";
+
+    // ---- Unsichtbarkeit beim Fund
+    private static int popSlot = -1;        // Hotbar-Slot, in dem der Trank beim Benutzen liegt
+    private static int popFromInv = -1;     // Inventar-Slot (9-35), falls der Trank erst hereingeholt wurde
+    private static boolean popSplash;
+    private static int popPrevSel;
+    private static float popPrevPitch;
+    private static boolean popUsed;
+
+    private static boolean isInvisPotion(ItemStack st, boolean splash) {
+        if (st.isEmpty() || st.getItem() != (splash ? Items.SPLASH_POTION : Items.POTION)) return false;
+        PotionContentsComponent c = st.get(DataComponentTypes.POTION_CONTENTS);
+        if (c == null) return false;
+        for (StatusEffectInstance e : c.getEffects()) {
+            if (e.getEffectType().equals(StatusEffects.INVISIBILITY)) return true;
+        }
+        return false;
+    }
+
+    /** Kurzer Ping, damit man aufmerksam wird (kommt immer, auch ohne Trank). */
+    private static void ping(MinecraftClient mc) {
+        try {
+            mc.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.BLOCK_NOTE_BLOCK_PLING, 1.6f, 1.0f));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Sucht einen Unsichtbarkeitstrank (Hotbar zuerst, trinken vor werfen) und holt ihn in die Hand. */
+    private static boolean preparePop(MinecraftClient mc, ClientPlayerEntity p) {
+        popSlot = -1;
+        popFromInv = -1;
+        int[][] order = {{0, 9, 0}, {0, 9, 1}, {9, 36, 0}, {9, 36, 1}}; // von, bis, werfen?
+        for (int[] o : order) {
+            for (int i = o[0]; i < o[1]; i++) {
+                if (!isInvisPotion(p.getInventory().getStack(i), o[2] == 1)) continue;
+                popSplash = o[2] == 1;
+                popPrevSel = p.getInventory().getSelectedSlot();
+                if (i < 9) {
+                    popSlot = i;
+                    p.getInventory().setSelectedSlot(i);
+                } else {
+                    popSlot = popPrevSel;
+                    popFromInv = i;
+                    mc.interactionManager.clickSlot(p.playerScreenHandler.syncId, i, popPrevSel, SlotActionType.SWAP, p);
+                }
+                popPrevPitch = p.getPitch();
+                popUsed = false;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void finishPop(MinecraftClient mc, ClientPlayerEntity p, String msg) {
+        mc.options.useKey.setPressed(false);
+        if (popSplash) p.setPitch(popPrevPitch);
+        if (popFromInv >= 0) {
+            mc.interactionManager.clickSlot(p.playerScreenHandler.syncId, popFromInv, popSlot, SlotActionType.SWAP, p);
+        }
+        p.getInventory().setSelectedSlot(popPrevSel);
+        state = State.IDLE;
+        say(msg, Formatting.AQUA);
+    }
 
     public static boolean running() { return state != State.IDLE; }
 
@@ -86,6 +157,10 @@ public final class AutoRtp {
     public static void stop() {
         if (!running()) return;
         MinecraftClient mc = MinecraftClient.getInstance();
+        if (state == State.POP && mc.player != null && mc.interactionManager != null) {
+            finishPop(mc, mc.player, "Gestoppt.");
+            return;
+        }
         if (mc.player != null && screenOpen(mc, mc.player)) mc.player.closeHandledScreen();
         state = State.IDLE;
         say("Gestoppt.", Formatting.YELLOW);
@@ -255,11 +330,44 @@ public final class AutoRtp {
                             + " Teleport(s). Gestoppt.", Formatting.GREEN);
                     p.sendMessage(Text.literal("Spieler gefunden: " + f.getName().getString() + " (" + d + " m)")
                             .formatted(Formatting.GREEN), true);
+                    ping(mc);
+                    if (cfg.rtpInvis) {
+                        if (preparePop(mc, p)) {
+                            state = State.POP;
+                            timer = 0;
+                            status = "Spieler gefunden - benutze Unsichtbarkeit ...";
+                        } else {
+                            say("Kein Unsichtbarkeitstrank dabei.", Formatting.YELLOW);
+                        }
+                    }
                     return;
                 }
                 if (timer >= Math.max(1, cfg.rtpWaitSec) * 20) {
                     state = State.SEND;
                     timer = 0;
+                }
+            }
+            case POP -> {
+                // Platz zum Synchronisieren, falls der Trank erst aus dem Inventar geholt wurde
+                if (timer < 3) return;
+                if (!popUsed) {
+                    popUsed = true;
+                    if (popSplash) {
+                        p.setPitch(90f); // auf die eigenen Fuesse werfen
+                        mc.interactionManager.interactItem(p, Hand.MAIN_HAND);
+                        p.swingHand(Hand.MAIN_HAND);
+                    } else {
+                        mc.options.useKey.setPressed(true); // gedrueckt halten, bis fertig getrunken
+                    }
+                    timer = 0;
+                    return;
+                }
+                if (popSplash) {
+                    if (timer >= 3) finishPop(mc, p, "Unsichtbarkeit geworfen.");
+                } else if (timer >= 6 && !p.isUsingItem()) {
+                    finishPop(mc, p, "Unsichtbarkeit getrunken.");
+                } else if (timer > 80) {
+                    finishPop(mc, p, "Trinken hat zu lange gedauert, abgebrochen.");
                 }
             }
             case DELAY -> {

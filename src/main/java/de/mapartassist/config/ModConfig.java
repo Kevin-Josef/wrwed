@@ -172,6 +172,8 @@ public class ModConfig {
     /** Pause in Sekunden, bevor derselbe Spieler erneut gemeldet wird. */
     public int alertCooldownSec = 60;
     /** Auto-RTP: Dimension im RTP-Menue (0 Overworld, 1 Nether, 2 End), Wartezeit nach Teleport und nach Fehlversuch (Sekunden). */
+    /** Auto-RTP: bei gefundenem Spieler sofort Unsichtbarkeitstrank trinken/werfen (+ Ping). */
+    public boolean rtpInvis = true;
     public int rtpDimension = 0;
     public int rtpWaitSec = 4;
     public int rtpRetrySec = 5;

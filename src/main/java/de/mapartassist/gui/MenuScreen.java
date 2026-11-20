@@ -1477,13 +1477,15 @@ public class MenuScreen extends Screen {
         }
         controls.add(new Sld(cx + 12, cy + 88, cw - 24, "Warten nach Teleport (Spieler suchen)", " s", 1, 15,
                 () -> Math.max(1, Math.min(15, cfg.rtpWaitSec)), v -> cfg.rtpWaitSec = v));
+        controls.add(new Tog(cx + 6, cy + 144, cw - 12, "Bei Fund: Unsichtbarkeit trinken/werfen + Ping",
+                () -> cfg.rtpInvis, v -> { cfg.rtpInvis = v; ModConfig.save(); }));
         controls.add(new Sld(cx + 12, cy + 118, cw - 24, "Pause nach Fehlversuch", " s", 1, 60,
                 () -> Math.max(1, Math.min(60, cfg.rtpRetrySec)), v -> cfg.rtpRetrySec = v));
     }
 
     private void renderRtp(DrawContext ctx) {
         drawWrapped(ctx, "Sendet /rtp, klickt im Menü die gewählte Dimension an und wiederholt das, bis nach einem Teleport ein Spieler in Reichweite des Spieler-ESP (Reichweite dort einstellbar) auftaucht. Dann stoppt es.",
-                cx + 12, cy + 148, cw - 24, 0xFF777783);
+                cx + 12, cy + 170, cw - 24, 0xFF777783);
         String st = AutoRtp.status;
         text(ctx, st == null ? "" : shorten(st, 90), cx, top + H - 24, 0xFFFFD866);
     }

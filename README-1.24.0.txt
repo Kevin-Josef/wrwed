@@ -13,3 +13,10 @@ NEU: AUTO-RTP (Menue: Portal-Symbol oben rechts, oder Extras > Auto-RTP)
   (3 Bloecke nebeneinander). Der Menue-Inhalt steht danach in config/mapartassist/rtp-dump.txt (Diagnose).
 - Stoppt automatisch bei Tod, Verlassen des Servers oder 12 Fehlversuchen hintereinander.
 - Nicht gebaut/getestet (kein Gradle hier). Bitte bauen und Fehlermeldungen schicken.
+
+AUTO-RTP: UNSICHTBARKEIT BEIM FUND
+- Sobald ein Spieler gefunden wird: kurzer Ping (immer) und Unsichtbarkeitstrank benutzen (Menue-Schalter, Standard an).
+- Reihenfolge: Hotbar vor Inventar, Trank zum Trinken vor Wurftrank. Aus dem Inventar wird der Trank in den
+  aktuellen Hotbar-Slot getauscht und danach zurueckgetauscht, der alte Slot wird wieder gewaehlt.
+- Wurftrank wird nach unten auf die eigenen Fuesse geworfen (Blick wird danach zurueckgesetzt).
+- Kein Trank dabei: nur Ping + Chatmeldung.
