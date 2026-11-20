@@ -72,7 +72,7 @@ public final class AutoRtp {
     /** Kurzer Ping, damit man aufmerksam wird (kommt immer, auch ohne Trank). */
     private static void ping(MinecraftClient mc) {
         try {
-            mc.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.BLOCK_NOTE_BLOCK_PLING, 1.6f, 1.0f));
+            mc.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 1.6f, 1.0f));
         } catch (Throwable ignored) {
         }
     }
