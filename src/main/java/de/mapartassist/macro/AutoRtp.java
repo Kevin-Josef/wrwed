@@ -4,7 +4,6 @@ import de.mapartassist.config.ModConfig;
 import de.mapartassist.mini.Minimi;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.PotionContentsComponent;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -71,10 +70,10 @@ public final class AutoRtp {
 
     /** Kurzer Ping, damit man aufmerksam wird (kommt immer, auch ohne Trank). */
     private static void ping(MinecraftClient mc) {
+        if (mc.player == null) return;
         try {
-            // 2-Argument-Variante (wie die Vanilla-Buttonklicks); doppelt abgespielt, damit der Ping lauter ist
-            mc.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.BLOCK_NOTE_BLOCK_PLING, 1.6f));
-            mc.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.BLOCK_NOTE_BLOCK_PLING, 1.6f));
+            // Normale Entity-Methode (Sound, Lautstaerke, Tonhoehe): volle Lautstaerke, hoher Ping
+            mc.player.playSound(SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 1.0f, 1.8f);
         } catch (Throwable ignored) {
         }
     }
