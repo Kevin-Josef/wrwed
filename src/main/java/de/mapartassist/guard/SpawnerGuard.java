@@ -21,6 +21,7 @@ import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 
 import java.util.HashSet;
 import java.util.List;
@@ -53,14 +54,20 @@ public final class SpawnerGuard {
     /** Mindestwartezeit nach dem letzten Abbau, damit Drops erscheinen (1 s). */
     private static final int COLLECT_MIN_TICKS = 6;
     /** Maximale Wartezeit auf das Einsammeln (12 s). */
-    private static final int COLLECT_MAX_TICKS = 100;
+    private static final int COLLECT_MAX_TICKS = 80;
     /** Nur Spawner-Drops in diesem Umkreis zaehlen (Spawner stehen max. 3x3 Bloecke um den Spieler). */
     private static final double COLLECT_RADIUS = 3.5;
     private static int breakTicks;
     private static int collectTicks;
 
-    private enum Step { SNEAK, BREAK1, WAIT, BREAK2, VERIFY }
-    private static Step step = Step.SNEAK;
+    private enum Step { BREAK1, WAIT, BREAK2, VERIFY }
+    private static Step step = Step.BREAK1;
+    /** Aktueller Zielpunkt auf dem Spawner (sichtbarer Punkt, per Raycast geprueft). */
+    private static Vec3d aim;
+    private static int aimLost, blockedTicks, sneakWait, invStart;
+    /** Max. Ticks ohne freie Sicht auf irgendeinen Spawner, bevor aufgegeben wird (1,5 s). */
+    private static final int BLOCKED_MAX_TICKS = 30;
+    private static final double[] GRID = {0.5, 0.2, 0.8};
     private static int stepTicks;
     private static boolean breakStarted;
     private static int attempts;
@@ -129,8 +136,14 @@ public final class SpawnerGuard {
         swapCooldown = 0;
     }
 
-    private static void holdSneak(MinecraftClient client) {
-        client.options.sneakKey.setPressed(true);
+    /**
+     * Schleicht nur, wenn noch nicht geschlichen wird. Wichtig fuer "Schleichen umschalten": dort wuerde
+     * jedes setPressed(true) den Zustand umdrehen. Deshalb erst pruefen, ob schon geschlichen wird.
+     */
+    private static void ensureSneak(MinecraftClient client, ClientPlayerEntity p) {
+        var key = client.options.sneakKey;
+        if (p.isSneaking() || key.isPressed()) return; // schleicht schon (oder Umschalter ist schon an)
+        key.setPressed(true);
         sneakForced = true;
     }
 
@@ -159,14 +172,19 @@ public final class SpawnerGuard {
     private static void releaseSneak(MinecraftClient client) {
         releaseKeys(client);
         if (sneakForced && client != null && client.options != null) {
-            client.options.sneakKey.setPressed(false);
+            var key = client.options.sneakKey;
+            key.setPressed(false);
+            // Umschalt-Modus: setPressed(false) tut dort nichts, nochmal "tippen" = wieder aufstehen
+            if (key.isPressed()) key.setPressed(true);
         }
         sneakForced = false;
     }
 
     private static void nextSpawner() {
         current = null;
-        step = Step.SNEAK;
+        aim = null;
+        aimLost = 0;
+        step = Step.BREAK1;
         stepTicks = 0;
         breakStarted = false;
         breakTicks = 0;
@@ -222,7 +240,10 @@ public final class SpawnerGuard {
                 skipped.clear();
                 nextSpawner();
                 swapCooldown = 0;
-                if (!cfg.spawnerGuardMine || !hasSilkPickaxe(p) || findSpawner(client, p) == null) {
+                blockedTicks = 0;
+                sneakWait = 0;
+                invStart = countSpawners(p);
+                if (!cfg.spawnerGuardMine || !hasSilkPickaxe(p) || !anySpawnerNear(client, p)) {
                     status = !cfg.spawnerGuardMine ? "Spieler erkannt, verlasse Server."
                             : !hasSilkPickaxe(p) ? "Keine Silk-Touch-Spitzhacke! Verlasse Server."
                             : "Keine Spawner in Reichweite, verlasse Server.";
@@ -312,33 +333,50 @@ public final class SpawnerGuard {
             return;
         }
 
-        if (current == null) {
-            current = findSpawner(client, p);
-            if (current == null) {
-                if (mined > 0) startCollecting(client);
-                else { status = "Keine Spawner abgebaut, verlasse Server."; startLeaving(client); }
+        ensureSneak(client, p); // Ohne Schleichen laesst der Server den Abbau nicht zu
+        if (!p.isSneaking()) {
+            if (++sneakWait <= 10) {
+                status = "Schleiche ...";
+                pressAttack(client, false);
                 return;
             }
+        } else {
+            sneakWait = 0;
         }
 
-        holdSneak(client); // Ohne Schleichen laesst der Server den Abbau nicht zu
+        if (current == null) {
+            current = pickTarget(client, p);
+            if (current == null) {
+                if (!anySpawnerNear(client, p)) {
+                    finishMining(client);
+                } else if (++blockedTicks > BLOCKED_MAX_TICKS) {
+                    status = "Restliche Spawner nicht erreichbar (keine freie Sicht).";
+                    finishMining(client);
+                } else {
+                    status = "Suche freie Sicht auf Spawner ...";
+                    pressAttack(client, false);
+                }
+                return;
+            }
+            blockedTicks = 0;
+            step = Step.BREAK1;
+            stepTicks = 0;
+            breakStarted = false;
+            breakTicks = 0;
+            attempts = 0;
+        }
+
         stepTicks++;
         boolean isSpawner = client.world.getBlockState(current).isOf(Blocks.SPAWNER);
         int n = mined + 1;
 
         switch (step) {
-            case SNEAK -> {
-                status = "Spawner " + n + ": schleiche ...";
-                if (p.isSneaking() || stepTicks > 10) {
-                    step = Step.BREAK1;
-                    stepTicks = 0;
-                    breakStarted = false;
-        breakTicks = 0;
-                }
-            }
             case BREAK1 -> {
                 status = "Spawner " + n + ": 1. Abbau ...";
-                if (breakTick(client, p)) {
+                if (!isSpawner) { // schon weg (z. B. von jemand anderem abgebaut)
+                    step = Step.VERIFY;
+                    stepTicks = 0;
+                } else if (breakTick(client, p)) {
                     step = Step.WAIT;
                     stepTicks = 0;
                 }
@@ -349,10 +387,10 @@ public final class SpawnerGuard {
                     step = Step.VERIFY; // Einzelner Spawner: schon nach dem 1. Abbau weg
                     stepTicks = 0;
                 } else if (stepTicks >= CONFIRM_WAIT_TICKS) {
-                    step = isSpawner ? Step.BREAK2 : Step.VERIFY;
+                    step = Step.BREAK2;
                     stepTicks = 0;
                     breakStarted = false;
-        breakTicks = 0;
+                    breakTicks = 0;
                 }
             }
             case BREAK2 -> {
@@ -374,10 +412,20 @@ public final class SpawnerGuard {
                         step = Step.BREAK1; // erneut versuchen (Bestaetigung evtl. abgelaufen)
                         stepTicks = 0;
                         breakStarted = false;
-        breakTicks = 0;
+                        breakTicks = 0;
                     }
                 }
             }
+        }
+    }
+
+    private static void finishMining(MinecraftClient client) {
+        client.interactionManager.cancelBlockBreaking();
+        if (mined > 0) {
+            startCollecting(client);
+        } else {
+            status = "Keine Spawner abgebaut, verlasse Server.";
+            startLeaving(client);
         }
     }
 
@@ -389,7 +437,22 @@ public final class SpawnerGuard {
      */
     private static boolean breakTick(MinecraftClient client, ClientPlayerEntity p) {
         breakTicks++;
-        lookAt(p, Vec3d.ofCenter(current));
+        // Zielpunkt pruefen (Pose/Augenhoehe aendert sich beim Schleichen), sonst neuen sichtbaren Punkt suchen
+        Vec3d a = aim;
+        if (a == null || !hitsTarget(client, p, a, current)) {
+            a = findAim(client, p, current);
+            aim = a;
+        }
+        if (a == null) {
+            pressAttack(client, false);
+            if (++aimLost > 15) { // keine freie Sicht mehr: diesen Spawner jetzt auslassen, naechsten nehmen
+                client.interactionManager.cancelBlockBreaking();
+                nextSpawner();
+            }
+            return false;
+        }
+        aimLost = 0;
+        lookAt(p, a);
         HitResult h = client.crosshairTarget;
         boolean aimed = h instanceof BlockHitResult bhr && bhr.getBlockPos().equals(current);
         pressAttack(client, aimed); // nie einen anderen Block treffen
@@ -405,6 +468,76 @@ public final class SpawnerGuard {
             return true; // Zeitlimit; VERIFY entscheidet, ob es nochmal versucht wird
         }
         return false;
+    }
+
+    /** Trifft ein Strahl vom Auge zu diesem Punkt als erstes den Zielblock (und ist er in Reichweite)? */
+    private static boolean hitsTarget(MinecraftClient client, ClientPlayerEntity p, Vec3d pt, BlockPos target) {
+        Vec3d eye = p.getEyePos();
+        Vec3d dir = pt.subtract(eye);
+        double len = dir.length();
+        if (len < 1.0e-3) return false;
+        Vec3d end = eye.add(dir.multiply((len + 0.5) / len));
+        BlockHitResult hit = client.world.raycast(new RaycastContext(eye, end,
+                RaycastContext.ShapeType.OUTLINE, RaycastContext.FluidHandling.NONE, p));
+        return hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(target)
+                && eye.distanceTo(hit.getPos()) <= REACH;
+    }
+
+    /** Sucht auf allen sechs Seiten des Blocks einen Punkt mit freier Sicht (Gitter je Seite). */
+    private static Vec3d findAim(MinecraftClient client, ClientPlayerEntity p, BlockPos pos) {
+        Vec3d center = Vec3d.ofCenter(pos);
+        Vec3d eye = p.getEyePos();
+        Vec3d best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (int axis = 0; axis < 3; axis++) {
+            for (int side = 0; side < 2; side++) {
+                for (double u : GRID) {
+                    for (double v : GRID) {
+                        double[] c = new double[3];
+                        c[axis] = side;
+                        c[(axis + 1) % 3] = u;
+                        c[(axis + 2) % 3] = v;
+                        Vec3d surface = new Vec3d(pos.getX() + c[0], pos.getY() + c[1], pos.getZ() + c[2]);
+                        Vec3d pt = surface.lerp(center, 0.1); // minimal ins Innere, damit der Rand sicher trifft
+                        if (!hitsTarget(client, p, pt, pos)) continue;
+                        double score = eye.distanceTo(pt) + 0.3 * pt.distanceTo(center);
+                        if (score < bestScore) { bestScore = score; best = pt; }
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    /** Naechster Spawner in Reichweite, auf den man freie Sicht hat (verdeckte kommen spaeter dran). */
+    private static BlockPos pickTarget(MinecraftClient client, ClientPlayerEntity p) {
+        Vec3d eye = p.getEyePos();
+        BlockPos base = p.getBlockPos();
+        BlockPos best = null;
+        Vec3d bestAim = null;
+        double bestD = Double.MAX_VALUE;
+        for (BlockPos pos : BlockPos.iterate(base.add(-SCAN, -SCAN, -SCAN), base.add(SCAN, SCAN, SCAN))) {
+            if (!client.world.getBlockState(pos).isOf(Blocks.SPAWNER) || skipped.contains(pos)) continue;
+            double d = eye.squaredDistanceTo(Vec3d.ofCenter(pos));
+            if (d > REACH * REACH || d >= bestD) continue;
+            Vec3d a = findAim(client, p, pos);
+            if (a == null) continue;
+            bestD = d;
+            best = pos.toImmutable();
+            bestAim = a;
+        }
+        aim = bestAim;
+        aimLost = 0;
+        return best;
+    }
+
+    private static int countSpawners(ClientPlayerEntity p) {
+        int n = 0;
+        for (int i = 0; i < 36; i++) {
+            ItemStack st = p.getInventory().getStack(i);
+            if (st.isOf(Items.SPAWNER)) n += st.getCount();
+        }
+        return n;
     }
 
     private static void lookAt(ClientPlayerEntity p, Vec3d t) {
@@ -425,10 +558,15 @@ public final class SpawnerGuard {
     /** Wartet, bis alle gedroppten Spawner im Inventar sind (laeuft ggf. zu ihnen), erst dann Verlassen. */
     private static void collect(MinecraftClient client, ClientPlayerEntity p) {
         collectTicks++;
-        holdSneak(client); // schleichend laufen: kein Absturz vom Rand
+        ensureSneak(client, p); // schleichend laufen: kein Absturz vom Rand
         List<ItemEntity> items = client.world.getEntitiesByClass(ItemEntity.class,
                 p.getBoundingBox().expand(COLLECT_RADIUS), e -> e.getStack().isOf(Items.SPAWNER) && e.distanceTo(p) <= COLLECT_RADIUS);
-        if (collectTicks >= COLLECT_MIN_TICKS && items.isEmpty()) {
+        if (countSpawners(p) - invStart >= mined) { // alle Spawner liegen im Inventar: sofort weiter
+            status = mined + " Spawner abgebaut und eingesammelt, verlasse Server.";
+            startLeaving(client);
+            return;
+        }
+        if (collectTicks >= 30 && items.isEmpty()) {
             status = mined + " Spawner abgebaut und eingesammelt, verlasse Server.";
             startLeaving(client);
             return;
@@ -475,17 +613,15 @@ public final class SpawnerGuard {
         return found;
     }
 
-    private static BlockPos findSpawner(MinecraftClient client, ClientPlayerEntity p) {
+    /** Gibt es noch einen (nicht aufgegebenen) Spawner in Reichweite, egal ob sichtbar? */
+    private static boolean anySpawnerNear(MinecraftClient client, ClientPlayerEntity p) {
         Vec3d eye = p.getEyePos();
         BlockPos base = p.getBlockPos();
-        BlockPos best = null;
-        double bestD = REACH * REACH;
         for (BlockPos pos : BlockPos.iterate(base.add(-SCAN, -SCAN, -SCAN), base.add(SCAN, SCAN, SCAN))) {
             if (!client.world.getBlockState(pos).isOf(Blocks.SPAWNER) || skipped.contains(pos)) continue;
-            double d = eye.squaredDistanceTo(Vec3d.ofCenter(pos));
-            if (d <= bestD) { bestD = d; best = pos.toImmutable(); }
+            if (eye.squaredDistanceTo(Vec3d.ofCenter(pos)) <= REACH * REACH) return true;
         }
-        return best;
+        return false;
     }
 
     private static boolean isSilkPick(ItemStack s) {

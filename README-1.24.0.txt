@@ -20,3 +20,15 @@ AUTO-RTP: UNSICHTBARKEIT BEIM FUND
   aktuellen Hotbar-Slot getauscht und danach zurueckgetauscht, der alte Slot wird wieder gewaehlt.
 - Wurftrank wird nach unten auf die eigenen Fuesse geworfen (Blick wird danach zurueckgesetzt).
 - Kein Trank dabei: nur Ping + Chatmeldung.
+
+SPAWNER-SCHUTZ UEBERARBEITET
+- Schleichen: Die Mod prueft jetzt, ob schon geschlichen wird (auch bei "Schleichen umschalten") und drueckt
+  Shift nur, wenn es noetig ist. Vorher wurde im Umschalt-Modus jeden Tick neu umgeschaltet. Nach dem Abbau
+  steht sie nur wieder auf, wenn sie selbst geschlichen ist.
+- Zielen: Fuer jeden Spawner wird per Raycast ein Punkt mit freier Sicht gesucht (alle 6 Seiten, Gitter pro Seite).
+  Verdeckte Spawner (z. B. diagonal im Kaefig) kommen dran, sobald die Sicht frei ist. Geht die Sicht verloren,
+  wird zum naechsten Spawner gewechselt statt haengenzubleiben. Angegriffen wird nur, wenn das Fadenkreuz
+  wirklich den Ziel-Spawner trifft.
+- Tempo: Der Schleich-Schritt pro Spawner entfaellt. Nach dem letzten Abbau wird sofort verlassen, sobald alle
+  Spawner im Inventar liegen (Zaehlung statt feste Wartezeit).
+- Nicht gebaut/getestet. Bitte bauen und Fehlermeldungen schicken.
