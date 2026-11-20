@@ -317,6 +317,7 @@ public final class BlockEsp {
         double ky = (sh / 2.0) / tanHalf;            // Pixel pro Einheit (y / z)
         double midX = sw / 2.0, midY = sh / 2.0;
 
+        EspDraw.style(cfg.espStyle);
         int range = cfg.espRange;
         double range2 = (range + 1.5) * (range + 1.5);
         int maxDraw = Math.max(10, cfg.espMaxBlocks);
@@ -347,13 +348,14 @@ public final class BlockEsp {
             boolean centerVisible = zc > NEAR;
             double size = centerVisible ? ky / zc : 0; // Pixel pro Blockkante
 
+            int col = cfg.espStyle.box(h.color);
             boolean any = false;
             if (centerVisible && size < 5.0) {
                 // weit weg: kleiner Punkt statt Umriss
                 double px = midX + mxc * kx / zc;
                 double py = midY - myc * ky / zc;
                 if (px >= -4 && px <= sw + 4 && py >= -4 && py <= sh + 4) {
-                    EspDraw.dot(g, px, py, h.color);
+                    EspDraw.dot(g, px, py, col);
                     any = true;
                 }
             } else {
@@ -361,14 +363,14 @@ public final class BlockEsp {
                     for (int bit = 0; bit < 3; bit++) {
                         if ((c & (1 << bit)) != 0) continue;
                         int d = c | (1 << bit);
-                        any |= edge(g, PX[c], PY[c], PZ[c], PX[d], PY[d], PZ[d], midX, midY, kx, ky, sw, sh, h.color);
+                        any |= edge(g, PX[c], PY[c], PZ[c], PX[d], PY[d], PZ[d], midX, midY, kx, ky, sw, sh, col);
                     }
                 }
             }
 
             if (cfg.espTracers && centerVisible && drawn < 120) {
                 double tx = midX + mxc * kx / zc, ty = midY - myc * ky / zc;
-                clippedLine(g, midX, midY, tx, ty, sw, sh, (h.color & 0xFFFFFF) | 0x99000000);
+                clippedLine(g, midX, midY, tx, ty, sw, sh, cfg.espStyle.tracer(col));
             }
             if (any || (cfg.espTracers && centerVisible)) drawn++;
         }

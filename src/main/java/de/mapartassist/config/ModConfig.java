@@ -172,6 +172,10 @@ public class ModConfig {
     /** Pause in Sekunden, bevor derselbe Spieler erneut gemeldet wird. */
     public int alertCooldownSec = 60;
     /** Auto-RTP: Dimension im RTP-Menue (0 Overworld, 1 Nether, 2 End), Wartezeit nach Teleport und nach Fehlversuch (Sekunden). */
+    /** Farben/Glow der ESPs (Standard: wie bisher). */
+    public EspStyle espStyle = new EspStyle();
+    public EspStyle entityEspStyle = new EspStyle();
+    public EspStyle playerEspStyle = new EspStyle();
     /** Auto-RTP: bei gefundenem Spieler sofort Unsichtbarkeitstrank trinken/werfen (+ Ping). */
     public boolean rtpInvis = true;
     public int rtpDimension = 0;
@@ -258,6 +262,14 @@ public class ModConfig {
                 if (loaded.alertCommand == null || loaded.alertCommand.isBlank()) loaded.alertCommand = "msg";
                 loaded.alertRadius = Math.max(10, Math.min(256, loaded.alertRadius <= 0 ? 50 : loaded.alertRadius));
                 loaded.alertCooldownSec = Math.max(5, Math.min(600, loaded.alertCooldownSec <= 0 ? 60 : loaded.alertCooldownSec));
+                if (loaded.espStyle == null) loaded.espStyle = new EspStyle();
+                if (loaded.entityEspStyle == null) loaded.entityEspStyle = new EspStyle();
+                if (loaded.playerEspStyle == null) {
+                    loaded.playerEspStyle = new EspStyle();
+                }
+                loaded.espStyle.clamp();
+                loaded.entityEspStyle.clamp();
+                loaded.playerEspStyle.clamp();
                 loaded.rtpDimension = Math.max(0, Math.min(2, loaded.rtpDimension));
                 loaded.rtpWaitSec = Math.max(1, Math.min(15, loaded.rtpWaitSec <= 0 ? 4 : loaded.rtpWaitSec));
                 loaded.rtpRetrySec = Math.max(1, Math.min(60, loaded.rtpRetrySec <= 0 ? 5 : loaded.rtpRetrySec));

@@ -11,6 +11,7 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.item.Items;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
@@ -184,16 +185,41 @@ public final class AutoRtp {
         status = why + " - neuer Versuch in " + sec + " s";
     }
 
-    /** Anderer Spieler im Radius des Spieler-ESP (gleiche Regeln wie dort). */
+    /**
+     * Anderer Spieler im Radius des Spieler-ESP. Gleiche Regeln wie dort: Abstand von der Kamera zur
+     * (interpolierten) Position des Spielers, Spectator und Minimis werden ignoriert.
+     */
     private static PlayerEntity findPlayer(MinecraftClient mc, ClientPlayerEntity p, ModConfig cfg) {
         double r = Math.max(16, cfg.playerEspRange);
         double r2 = r * r;
+        Vec3d eye = p.getEyePos();
         for (PlayerEntity o : mc.world.getPlayers()) {
             if (o == p || o.isSpectator() || Minimi.isMini(o)) continue;
-            if (p.squaredDistanceTo(o) > r2) continue;
+            double dx = o.getX() - eye.x, dy = o.getY() - eye.y, dz = o.getZ() - eye.z;
+            if (dx * dx + dy * dy + dz * dz > r2) continue;
             return o;
         }
         return null;
+    }
+
+    private static void onFound(MinecraftClient mc, ClientPlayerEntity p, PlayerEntity f, ModConfig cfg) {
+        long d = Math.round(Math.sqrt(p.squaredDistanceTo(f)));
+        if (screenOpen(mc, p)) p.closeHandledScreen();
+        say("Spieler gefunden: " + f.getName().getString() + " (" + d + " m) nach " + teleports
+                + " Teleport(s). Gestoppt.", Formatting.GREEN);
+        p.sendMessage(Text.literal("Spieler gefunden: " + f.getName().getString() + " (" + d + " m)")
+                .formatted(Formatting.GREEN), true);
+        ping(mc);
+        state = State.IDLE;
+        if (cfg.rtpInvis) {
+            if (preparePop(mc, p)) {
+                state = State.POP;
+                timer = 0;
+                status = "Spieler gefunden - benutze Unsichtbarkeit ...";
+            } else {
+                say("Kein Unsichtbarkeitstrank dabei.", Formatting.YELLOW);
+            }
+        }
     }
 
     private static boolean teleported(MinecraftClient mc, ClientPlayerEntity p) {
@@ -267,6 +293,17 @@ public final class AutoRtp {
             return;
         }
         ModConfig cfg = ModConfig.get();
+
+        // Ab dem ersten Teleport wird in JEDER Phase nach Spielern geschaut (nicht nur direkt nach dem Teleport),
+        // damit auch Spieler auffallen, die erst spaeter in Reichweite kommen oder nachladen.
+        // Vor dem ersten Teleport nicht: am Startpunkt (z. B. Spawn) stehen oft schon andere herum.
+        if (teleports > 0 && state != State.POP) {
+            PlayerEntity f = findPlayer(mc, p, cfg);
+            if (f != null) {
+                onFound(mc, p, f, cfg);
+                return;
+            }
+        }
         timer++;
 
         switch (state) {
@@ -323,26 +360,6 @@ public final class AutoRtp {
                 }
             }
             case SCAN -> {
-                PlayerEntity f = findPlayer(mc, p, cfg);
-                if (f != null) {
-                    long d = Math.round(Math.sqrt(p.squaredDistanceTo(f)));
-                    state = State.IDLE;
-                    say("Spieler gefunden: " + f.getName().getString() + " (" + d + " m) nach " + teleports
-                            + " Teleport(s). Gestoppt.", Formatting.GREEN);
-                    p.sendMessage(Text.literal("Spieler gefunden: " + f.getName().getString() + " (" + d + " m)")
-                            .formatted(Formatting.GREEN), true);
-                    ping(mc);
-                    if (cfg.rtpInvis) {
-                        if (preparePop(mc, p)) {
-                            state = State.POP;
-                            timer = 0;
-                            status = "Spieler gefunden - benutze Unsichtbarkeit ...";
-                        } else {
-                            say("Kein Unsichtbarkeitstrank dabei.", Formatting.YELLOW);
-                        }
-                    }
-                    return;
-                }
                 if (timer >= Math.max(1, cfg.rtpWaitSec) * 20) {
                     state = State.SEND;
                     timer = 0;

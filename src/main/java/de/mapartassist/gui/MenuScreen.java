@@ -10,6 +10,7 @@ import de.mapartassist.config.ModConfig;
 import de.mapartassist.litematica.SchematicProgress;
 import de.mapartassist.macro.AfkGuard;
 import de.mapartassist.macro.AutoRtp;
+import de.mapartassist.config.EspStyle;
 import de.mapartassist.macro.AutoRepair;
 import de.mapartassist.macro.MovementRecorder;
 import de.mapartassist.macro.SellMacro;
@@ -73,6 +74,7 @@ public class MenuScreen extends Screen {
         FREECAM("Extras", "Freecam"),
         ESP("Extras", "Block-ESP"),
         RTP("Extras", "Auto-RTP"),
+        ESPSTYLE("Extras", "ESP-Farben"),
         ALERT("Spieler", "Spieler-Alarm"),
         ITEMS("Spieler", "Item-Anzeige"),
         PESP("Spieler", "Spieler-ESP"),
@@ -91,6 +93,9 @@ public class MenuScreen extends Screen {
     // bleiben beim erneuten Oeffnen erhalten
     private static Tab activeTab = Tab.HOME;
     private static boolean editAccent = true;
+    /** ESP-Farben: 0 Bloecke, 1 Entities, 2 Spieler; Tracer-Farbe statt Umrissfarbe bearbeiten. */
+    private static int styleTarget = 0;
+    private static boolean styleTracer = false;
     private static int capeScroll = 0;
     private static boolean dropAsElytra = false;
     private static int macroScroll = 0;
@@ -308,6 +313,12 @@ public class MenuScreen extends Screen {
                     ctx.fill(x + 3, ky[i], x + w - 3, ky[i] + 1, lc);
                     ctx.fill(kx[i], ky[i] - 1, kx[i] + 3, ky[i] + 2, sel ? 0xFFFFFFFF : acc);
                 }
+            } else if (kind == 4) {
+                // Farbpalette (ESP-Farben)
+                ctx.fill(x + 4, y + 4, x + 9, y + 9, 0xFFFF5555);
+                ctx.fill(x + 10, y + 4, x + 15, y + 9, 0xFF55FF77);
+                ctx.fill(x + 4, y + 10, x + 9, y + 15, 0xFF55AAFF);
+                ctx.fill(x + 10, y + 10, x + 15, y + 15, 0xFFFFD43B);
             } else if (kind == 3) {
                 // Portal (Auto-RTP)
                 outline(ctx, x + 5, y + 3, 8, 12, lc);
@@ -880,6 +891,10 @@ public class MenuScreen extends Screen {
         titleField = null;
         fields.clear();
 
+        controls.add(new IconBtn(left + W - 116, top + 12, 4, "ESP-Farben", () -> activeTab == Tab.ESPSTYLE, () -> {
+            if (activeTab != Tab.ESPSTYLE) styleTarget = activeTab == Tab.PESP ? 2 : (activeTab == Tab.ESP && espEntityMode ? 1 : styleTarget);
+            openTab(activeTab == Tab.ESPSTYLE ? Tab.HOME : Tab.ESPSTYLE);
+        }));
         controls.add(new IconBtn(left + W - 94, top + 12, 3, "Auto-RTP", () -> activeTab == Tab.RTP || AutoRtp.running(), () ->
                 openTab(activeTab == Tab.RTP ? Tab.HOME : Tab.RTP)));
         controls.add(new IconBtn(left + W - 72, top + 12, 2, "Block-ESP", () -> activeTab == Tab.ESP || ModConfig.get().espEnabled, () ->
@@ -915,6 +930,7 @@ public class MenuScreen extends Screen {
             case ITEMS -> buildItems();
             case PESP -> buildPlayerEsp();
             case RTP -> buildRtp();
+            case ESPSTYLE -> buildEspStyle();
             case TOTEM -> buildTotem();
         }
     }
@@ -1463,6 +1479,82 @@ public class MenuScreen extends Screen {
                 cx, top + H - 24, st == null || st.isEmpty() ? 0xFF777783 : 0xFFFFD866);
     }
 
+    private static final int[] ESP_PRESETS = {
+            0xFF5555, 0xFF8A3D, 0xFFD43B, 0x2EE06A, 0x33E6FF, 0x3B6BFF, 0xB04BFF, 0xFF4FD8, 0xFFFFFF, 0x9A9AA6};
+
+    private void buildEspStyle() {
+        EspStyle st = curStyle();
+        int lx = cx + 10;
+        String[] tn = {"Blöcke", "Entities", "Spieler"};
+        int tw = (284 - 20 - 8) / 3;
+        for (int i = 0; i < 3; i++) {
+            final int t = i;
+            controls.add(new Btn(lx + i * (tw + 4), cy + 20, tw, 18, () -> tn[t],
+                    () -> { styleTarget = t; clearAndInit(); }).selectedIf(() -> styleTarget == t));
+        }
+        int hw = (284 - 20 - 4) / 2;
+        controls.add(new Btn(lx, cy + 42, hw, 18, () -> "Umriss-Farbe", () -> { styleTracer = false; clearAndInit(); })
+                .selectedIf(() -> !styleTracer));
+        controls.add(new Btn(lx + hw + 4, cy + 42, hw, 18, () -> "Tracer-Farbe", () -> { styleTracer = true; clearAndInit(); })
+                .selectedIf(() -> styleTracer));
+
+        int rgb = editedColor();
+        float[] hsv = rgbToHsv(rgb);
+        hue = hsv[0]; sat = hsv[1]; val = hsv[2];
+        controls.add(new PickerControl(cx + 14, cy + 68));
+
+        int rx = cx + 14 + S + 10 + HUE_W + 16;
+        int rw = cx + 274 - rx;
+        hexField = addField(new TextFieldWidget(textRenderer, rx, cy + 70, 74, 18, Text.literal("Hex")));
+        hexField.setMaxLength(6);
+        hexField.setText(String.format("%06X", rgb));
+        hexField.setChangedListener(t -> {
+            if (suppressHex || t.length() != 6) return;
+            try {
+                int c = Integer.parseInt(t, 16);
+                setEditedColor(c);
+                float[] h = rgbToHsv(c);
+                hue = h[0]; sat = h[1]; val = h[2];
+            } catch (NumberFormatException ignored) {
+            }
+        });
+        if (styleTracer) {
+            controls.add(new Tog(rx - 6, cy + 94, rw + 6, "Eigene Farbe",
+                    () -> curStyle().customTracer, v -> curStyle().customTracer = v));
+        } else {
+            controls.add(new Tog(rx - 6, cy + 94, rw + 6, "Eigene Farbe",
+                    () -> curStyle().customColor, v -> curStyle().customColor = v));
+        }
+        controls.add(new Btn(rx, cy + 120, rw, 18, () -> "Standard", () -> {
+            if (styleTracer) curStyle().customTracer = false; else curStyle().customColor = false;
+            ModConfig.save();
+        }));
+        for (int i = 0; i < ESP_PRESETS.length; i++) {
+            controls.add(new Swatch(cx + 14 + i * 26, cy + 176, 22, 12, ESP_PRESETS[i]));
+        }
+
+        int gx = cx + 304, gw = cw - 294 - 20;
+        controls.add(new Tog(gx - 6, cy + 22, gw + 12, "Glow an",
+                () -> curStyle().glow, v -> { curStyle().glow = v; ModConfig.save(); }));
+        controls.add(new Sld(gx, cy + 56, gw, "Glow-Breite", " px", 1, 12,
+                () -> Math.max(1, Math.min(12, curStyle().glowWidth)), v -> curStyle().glowWidth = v));
+    }
+
+    private void renderEspStyle(DrawContext ctx) {
+        EspStyle st = curStyle();
+        int rx = cx + 14 + S + 10 + HUE_W + 16;
+        int rw = cx + 274 - rx;
+        text(ctx, "#", rx - 9, cy + 75, 0xFFCCCCCC);
+        boolean custom = styleTracer ? st.customTracer : st.customColor;
+        text(ctx, custom ? "Vorschau" : "Vorschau (aus: Standard)", rx, cy + 146, 0xFFCCCCCC);
+        ctx.fill(rx - 1, cy + 157, rx + rw + 1, cy + 171, 0xFF000000);
+        ctx.fill(rx, cy + 158, rx + rw, cy + 170, 0xFF000000 | editedColor());
+        int gx = cx + 304, gw = cw - 294 - 20;
+        drawWrapped(ctx, "Gilt für die gewählte ESP (" + (styleTarget == 1 ? "Entities" : styleTarget == 2 ? "Spieler" : "Blöcke")
+                + "). Ohne eigene Farbe bleiben die bisherigen Farben. Tracer ohne eigene Farbe = Umrissfarbe.",
+                gx, cy + 100, gw, 0xFF777783);
+    }
+
     private void buildRtp() {
         ModConfig cfg = ModConfig.get();
         controls.add(new Tog(cx + 6, cy + 20, cw - 12, "Auto-RTP läuft",
@@ -1962,10 +2054,24 @@ public class MenuScreen extends Screen {
 
     // ================================================================== Farben
 
-    private int editedColor() { return editAccent ? ModConfig.get().accentColor : ModConfig.get().bgColor; }
+    private EspStyle curStyle() {
+        ModConfig c = ModConfig.get();
+        return styleTarget == 1 ? c.entityEspStyle : styleTarget == 2 ? c.playerEspStyle : c.espStyle;
+    }
+
+    private int editedColor() {
+        if (activeTab == Tab.ESPSTYLE) return styleTracer ? curStyle().tracerColor : curStyle().color;
+        return editAccent ? ModConfig.get().accentColor : ModConfig.get().bgColor;
+    }
 
     private void setEditedColor(int rgb) {
         rgb &= 0xFFFFFF;
+        if (activeTab == Tab.ESPSTYLE) {
+            EspStyle st = curStyle();
+            if (styleTracer) { st.tracerColor = rgb; st.customTracer = true; }
+            else { st.color = rgb; st.customColor = true; }
+            return;
+        }
         if (editAccent) ModConfig.get().accentColor = rgb;
         else ModConfig.get().bgColor = rgb;
     }
@@ -2351,6 +2457,10 @@ public class MenuScreen extends Screen {
             }
             case PESP -> card(ctx, cx, cy - 4, cw, 194, "Spieler-ESP (Umrisse durch Wände)");
             case RTP -> card(ctx, cx, cy - 4, cw, 194, "Auto-RTP (/rtp, bis ein Spieler in Reichweite ist)");
+            case ESPSTYLE -> {
+                card(ctx, cx, cy - 4, 284, 194, "Farbe");
+                card(ctx, cx + 294, cy - 4, cw - 294, 194, "Leuchten (Glow)");
+            }
             case TOTEM -> card(ctx, cx, cy - 4, cw, 194, "Totem-Wechsel (Gegner vor dir hält Gefahr-Item)");
             case ITEMS -> {
                 card(ctx, cx, cy - 4, LIST_W, 194, "Items (Klick = an/aus)");
@@ -2392,6 +2502,7 @@ public class MenuScreen extends Screen {
             case TOTEM -> renderTotem(ctx);
             case ALERT -> renderAlert(ctx);
             case RTP -> renderRtp(ctx);
+            case ESPSTYLE -> renderEspStyle(ctx);
             case ITEMS -> renderItems(ctx);
         }
     }

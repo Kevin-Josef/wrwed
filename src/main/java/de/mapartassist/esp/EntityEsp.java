@@ -99,6 +99,7 @@ public final class EntityEsp {
         double ky = (sh / 2.0) / tanHalf;
         double midX = sw / 2.0, midY = sh / 2.0;
         double range = Math.max(8, cfg.entityEspRange);
+        EspDraw.style(cfg.entityEspStyle);
         double range2 = range * range;
         int drawn = 0;
 
@@ -114,7 +115,7 @@ public final class EntityEsp {
             double hw = Math.max(0.15, o.getWidth() / 2.0), h = Math.max(0.2, o.getHeight());
             double zc = dx * fx + (dy + h / 2) * fy + dz * fz;
             if (zc < -2.0) continue;
-            int color = colorFor(Registries.ENTITY_TYPE.getId(o.getType()).getPath());
+            int color = cfg.entityEspStyle.box(colorFor(Registries.ENTITY_TYPE.getId(o.getType()).getPath()));
 
             for (int c = 0; c < 8; c++) {
                 double ax = pos.x + ((c & 1) == 0 ? -hw : hw) - ex;
@@ -151,7 +152,7 @@ public final class EntityEsp {
             }
             if (cfg.entityEspTracers && centerVisible && drawn < 120) {
                 double tx = midX + mx * kx / mz, ty = midY - my * ky / mz;
-                BlockEsp.clippedLine(g, midX, midY, tx, ty, sw, sh, (color & 0xFFFFFF) | 0x99000000);
+                BlockEsp.clippedLine(g, midX, midY, tx, ty, sw, sh, cfg.entityEspStyle.tracer(color));
                 any = true;
             }
             if (cfg.entityEspLabels && centerVisible && sizePx >= 6.0) {

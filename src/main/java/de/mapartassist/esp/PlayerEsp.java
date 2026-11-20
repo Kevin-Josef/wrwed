@@ -41,6 +41,8 @@ public final class PlayerEsp {
         double midX = sw / 2.0, midY = sh / 2.0;
         double range2 = (double) cfg.playerEspRange * cfg.playerEspRange;
         int drawn = 0;
+        EspDraw.style(cfg.playerEspStyle);
+        final int color = cfg.playerEspStyle.box(COLOR);
 
         for (PlayerEntity o : mc.world.getPlayers()) {
             if (drawn >= MAX_DRAW) break;
@@ -72,7 +74,7 @@ public final class PlayerEsp {
                 double px = midX + mx * kx / mz;
                 double py = midY - my * ky / mz;
                 if (px >= -4 && px <= sw + 4 && py >= -4 && py <= sh + 4) {
-                    EspDraw.dot(g, px, py, COLOR);
+                    EspDraw.dot(g, px, py, color);
                     any = true;
                 }
             } else {
@@ -81,7 +83,7 @@ public final class PlayerEsp {
                         if ((c & (1 << bit)) != 0) continue;
                         int d = c | (1 << bit);
                         any |= BlockEsp.edge(g, PX[c], PY[c], PZ[c], PX[d], PY[d], PZ[d],
-                                midX, midY, kx, ky, sw, sh, COLOR);
+                                midX, midY, kx, ky, sw, sh, color);
                     }
                 }
             }
@@ -93,7 +95,7 @@ public final class PlayerEsp {
                 if (bLen < 1e-6) { bdx = 0; bdy = 1; } else { bdx /= bLen; bdy /= bLen; }
             }
             if (cfg.playerEspTracers) {
-                int tc = (COLOR & 0xFFFFFF) | 0x99000000;
+                int tc = cfg.playerEspStyle.tracer(color);
                 if (centerVisible) {
                     double tx = midX + mx * kx / mz, ty = midY - my * ky / mz;
                     BlockEsp.clippedLine(g, midX, midY, tx, ty, sw, sh, tc);
